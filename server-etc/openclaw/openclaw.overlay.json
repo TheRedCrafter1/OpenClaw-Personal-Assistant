@@ -1,0 +1,19 @@
+{
+  "agents": {
+    "personal-assistant": {
+      "workspace": "server-etc/workspace/personal-assistant",
+      "enabled": true,
+      "description": "Personal Assistant (WhatsApp DM, Memory, Trello, Reminders)"
+    }
+  },
+  "routing": {
+    "whatsapp": {
+      "defaultAgent": null,
+      "allowlist": []
+    }
+  },
+  "heartbeat": {
+    "every": "0m"
+  }
+}
+
