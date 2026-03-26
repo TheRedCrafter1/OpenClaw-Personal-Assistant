@@ -21,7 +21,7 @@ Ein "konzentrationsarmer" Assistant, der:
 6. Sicherheit/Rate-Limits: Kein Spam, keine unbeabsichtigten Proaktivanfragen außerhalb definierter Regeln.
 
 ## 3) Nutzer & Annahmen
-- Nutzer: du (Elias) auf WhatsApp.
+- Nutzer auf WhatsApp.
 - "Junior Dev" soll v.a. die OpenClaw-Konfiguration + Agent-Workspace + Memory-Workflow + Trello-API Integration lernen.
 
 Annahmen (falls noch offen):
