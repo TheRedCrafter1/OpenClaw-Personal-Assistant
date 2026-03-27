@@ -1,3 +1,5 @@
+v1.0.3
+
 # PRD: OpenClaw Personal Assistant (WhatsApp, Memory, Trello)
 
 ## 1) Kurzfassung (TL;DR)
