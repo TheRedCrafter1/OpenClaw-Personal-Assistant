@@ -16,7 +16,13 @@ app.get("/", (_req, res) => {
 app.post("/message", (req, res) => {
   const text = req.body?.text ?? "";
 
-  res.json({
+  if (text.toLowerCase().includes("ziel")) {
+    return res.json({
+      reply: "Okay, was ist dein langfristiges Ziel?"
+    });
+  }
+
+  return res.json({
     reply: text ? `Empfangen: ${text}` : "Keine Nachricht übergeben."
   });
 });
