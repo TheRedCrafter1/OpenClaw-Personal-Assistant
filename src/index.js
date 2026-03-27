@@ -176,6 +176,28 @@ function buildStatusReply(memoryContent) {
   ].join("\n");
 }
 
+async function handleMessage(text) {
+  const normalizedText = (text ?? "").trim();
+  const parsedGoal = parseGoalMessage(normalizedText);
+
+  if (normalizedText.toUpperCase() === "STATUS") {
+    await ensureMemoryFile();
+    const memoryContent = await readFile(MEMORY_PATH, "utf8");
+    return buildStatusReply(memoryContent);
+  }
+
+  if (parsedGoal) {
+    const isSaved = await saveGoal(parsedGoal.section, parsedGoal.goal);
+    return isSaved ? parsedGoal.reply : "Ziel ist bereits gespeichert.";
+  }
+
+  if (normalizedText.toLowerCase().includes("ziel")) {
+    return "Okay, was ist dein langfristiges Ziel?";
+  }
+
+  return normalizedText ? `Empfangen: ${normalizedText}` : "Keine Nachricht übergeben.";
+}
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -186,39 +208,22 @@ app.get("/", (_req, res) => {
 
 app.post("/message", async (req, res) => {
   const text = req.body?.text ?? "";
-  const normalizedText = text.trim();
-  const parsedGoal = parseGoalMessage(text);
-
-  if (normalizedText.toUpperCase() === "STATUS") {
-    try {
-      await ensureMemoryFile();
-      const memoryContent = await readFile(MEMORY_PATH, "utf8");
-      return res.json({ reply: buildStatusReply(memoryContent) });
-    } catch {
-      return res.status(500).json({ reply: "Fehler beim Laden des Status." });
-    }
+  try {
+    const reply = await handleMessage(text);
+    return res.json({ reply });
+  } catch {
+    return res.status(500).json({ reply: "Fehler bei der Verarbeitung der Nachricht." });
   }
+});
 
-  if (parsedGoal) {
-    try {
-      const isSaved = await saveGoal(parsedGoal.section, parsedGoal.goal);
-      return res.json({
-        reply: isSaved ? parsedGoal.reply : "Ziel ist bereits gespeichert."
-      });
-    } catch {
-      return res.status(500).json({ reply: "Fehler beim Speichern des Ziels." });
-    }
+app.post("/webhook", async (req, res) => {
+  const text = req.body?.text ?? "";
+  try {
+    const reply = await handleMessage(text);
+    return res.json({ reply });
+  } catch {
+    return res.status(500).json({ reply: "Fehler bei der Webhook-Verarbeitung." });
   }
-
-  if (text.toLowerCase().includes("ziel")) {
-    return res.json({
-      reply: "Okay, was ist dein langfristiges Ziel?"
-    });
-  }
-
-  return res.json({
-    reply: text ? `Empfangen: ${text}` : "Keine Nachricht übergeben."
-  });
 });
 
 app.get("/memory", async (_req, res) => {
