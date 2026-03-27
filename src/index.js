@@ -36,6 +36,7 @@ function addGoalToSection(content, section, goalText) {
   const lines = content.split("\n");
   const sectionHeader = `## ${section}`;
   const sectionIndex = lines.findIndex((line) => line.trim() === sectionHeader);
+  const normalizedGoal = goalText.trim().toLowerCase();
 
   if (sectionIndex === -1) {
     return `${content.trimEnd()}\n\n${sectionHeader}\n- ${goalText}\n`;
@@ -50,6 +51,14 @@ function addGoalToSection(content, section, goalText) {
   }
 
   for (let i = sectionIndex + 1; i < nextSectionIndex; i += 1) {
+    const line = lines[i].trim();
+    if (line.startsWith("- ")) {
+      const existingGoal = line.slice(2).trim().toLowerCase();
+      if (existingGoal === normalizedGoal) {
+        return content;
+      }
+    }
+
     if (lines[i].trim() === "-") {
       lines[i] = `- ${goalText}`;
       return lines.join("\n");
@@ -111,7 +120,60 @@ async function saveGoal(section, goalText) {
   await ensureMemoryFile();
   const memoryContent = await readFile(MEMORY_PATH, "utf8");
   const nextContent = addGoalToSection(memoryContent, section, goalText);
+  if (nextContent === memoryContent) {
+    return false;
+  }
   await writeFile(MEMORY_PATH, nextContent, "utf8");
+  return true;
+}
+
+function getSectionGoals(content, section) {
+  const lines = content.split("\n");
+  const sectionHeader = `## ${section}`;
+  const sectionIndex = lines.findIndex((line) => line.trim() === sectionHeader);
+  if (sectionIndex === -1) {
+    return [];
+  }
+
+  let nextSectionIndex = lines.length;
+  for (let i = sectionIndex + 1; i < lines.length; i += 1) {
+    if (lines[i].startsWith("## ")) {
+      nextSectionIndex = i;
+      break;
+    }
+  }
+
+  const goals = [];
+  for (let i = sectionIndex + 1; i < nextSectionIndex; i += 1) {
+    const line = lines[i].trim();
+    if (!line.startsWith("- ")) {
+      continue;
+    }
+
+    const goal = line.slice(2).trim();
+    if (goal) {
+      goals.push(goal);
+    }
+  }
+
+  return goals;
+}
+
+function buildStatusReply(memoryContent) {
+  const longTerm = getSectionGoals(memoryContent, "Long-term");
+  const midTerm = getSectionGoals(memoryContent, "Mid-term");
+  const shortTerm = getSectionGoals(memoryContent, "Short-term");
+  const notes = getSectionGoals(memoryContent, "Notes");
+
+  const preview = (items) => (items.length ? items.slice(0, 2).join(" | ") : "keine");
+
+  return [
+    "Status:",
+    `Long-term (${longTerm.length}): ${preview(longTerm)}`,
+    `Mid-term (${midTerm.length}): ${preview(midTerm)}`,
+    `Short-term (${shortTerm.length}): ${preview(shortTerm)}`,
+    `Notes (${notes.length}): ${preview(notes)}`
+  ].join("\n");
 }
 
 app.get("/health", (_req, res) => {
@@ -124,13 +186,26 @@ app.get("/", (_req, res) => {
 
 app.post("/message", async (req, res) => {
   const text = req.body?.text ?? "";
+  const normalizedText = text.trim();
   const parsedGoal = parseGoalMessage(text);
+
+  if (normalizedText.toUpperCase() === "STATUS") {
+    try {
+      await ensureMemoryFile();
+      const memoryContent = await readFile(MEMORY_PATH, "utf8");
+      return res.json({ reply: buildStatusReply(memoryContent) });
+    } catch {
+      return res.status(500).json({ reply: "Fehler beim Laden des Status." });
+    }
+  }
 
   if (parsedGoal) {
     try {
-      await saveGoal(parsedGoal.section, parsedGoal.goal);
-      return res.json({ reply: parsedGoal.reply });
-    } catch (error) {
+      const isSaved = await saveGoal(parsedGoal.section, parsedGoal.goal);
+      return res.json({
+        reply: isSaved ? parsedGoal.reply : "Ziel ist bereits gespeichert."
+      });
+    } catch {
       return res.status(500).json({ reply: "Fehler beim Speichern des Ziels." });
     }
   }
