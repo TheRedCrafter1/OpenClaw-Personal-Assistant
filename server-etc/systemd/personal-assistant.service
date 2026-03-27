@@ -1,0 +1,17 @@
+[Unit]
+Description=Personal Assistant App
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/OpenClaw-Personal-Assistant
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=3
+User=root
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+[Install]
+WantedBy=multi-user.target
+
