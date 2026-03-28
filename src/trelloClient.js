@@ -29,5 +29,9 @@ export async function createCard({ name, desc = "", idList, due = null }) {
   if (!res.ok) {
     throw new Error(bodyText.slice(0, 200) || `HTTP ${res.status}`);
   }
-  return JSON.parse(bodyText);
+  try {
+    return JSON.parse(bodyText);
+  } catch {
+    throw new Error(`Trello: ungültige JSON-Antwort (HTTP ${res.status})`);
+  }
 }

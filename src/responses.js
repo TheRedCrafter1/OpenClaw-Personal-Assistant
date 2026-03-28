@@ -26,7 +26,7 @@ export function buildReply(kind, data = {}) {
         "Setze TRELLO_KEY, TRELLO_TOKEN, TRELLO_LIST_TASKS und TRELLO_LIST_SHOPPING."
       );
     case "trello_error":
-      return `Trello meldet einen Fehler: ${data.detail}`;
+      return `Trello meldet einen Fehler: ${data.detail ?? "unbekannt"}`;
     case "task_invalid":
       return "TASK ADD braucht einen Titel, z. B. *TASK ADD: Budget April* oder *TASK ADD: Steuer | due: 2 weeks*.";
     case "shop_invalid":
