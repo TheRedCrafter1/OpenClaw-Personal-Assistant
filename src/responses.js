@@ -12,16 +12,40 @@ export function buildReply(kind, data = {}) {
     case "goal_invalid":
       return (
         "Ich konnte kein klares Ziel erkennen. Schreib z. B. " +
-        "„kurzfristig Bewerbungsfoto machen“ oder „langfristig fitter werden“."
+        "*GOAL SET:* …, „kurzfristig …“, oder *STATUS:* für den Überblick."
       );
     case "status_empty":
       return "Ich habe aktuell noch keine Ziele gespeichert.";
     case "status_intro":
       return `Hier ist dein aktueller Stand:\n\n${data.body}`;
+    case "goal_check_empty":
+      return "Für einen Goal-Check brauche ich erst Ziele – schreib z. B. „GOAL SET: …“ oder „kurzfristig …“.";
+<<<<<<< HEAD
+    case "trello_not_configured":
+      return (
+        "Trello ist auf dem Server noch nicht konfiguriert. " +
+        "Setze TRELLO_KEY, TRELLO_TOKEN, TRELLO_LIST_TASKS und TRELLO_LIST_SHOPPING."
+      );
+    case "trello_error":
+      return `Trello meldet einen Fehler: ${data.detail}`;
+    case "task_invalid":
+      return "TASK ADD braucht einen Titel, z. B. *TASK ADD: Budget April* oder *TASK ADD: Steuer | due: 2 weeks*.";
+    case "shop_invalid":
+      return "SHOP ADD braucht Einträge, z. B. *SHOP ADD: Milch, Eier, Brot*.";
+    case "task_created":
+      return `Task in Trello: *${data.name}*${data.dueHint}`;
+    case "shop_added":
+      return `Zur Einkaufsliste (${data.count}): *${data.items}*.`;
     case "unknown":
       return (
         "Das habe ich noch nicht ganz verstanden. " +
-        "Probiers mit „langfristig …“, „STATUS“ oder „meine Ziele“."
+        "Befehle: *GOAL SET:*, *STATUS:*, *GOAL CHECK:*, *TASK ADD:*, *SHOP ADD:*, plus Zeitfenster-Ziele."
+=======
+    case "unknown":
+      return (
+        "Das habe ich noch nicht ganz verstanden. " +
+        "Offizielle Befehle: *GOAL SET:*, *STATUS:*, *GOAL CHECK:*, plus „langfristig/mittelfristig/kurzfristig …“."
+>>>>>>> 6e2f87cb2fbafe495e6eed6bb2e9a855974bea3f
       );
     case "command_wip":
       return (

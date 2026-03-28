@@ -1,6 +1,8 @@
-import { detectIntent, parseGoal } from "./parser.js";
+import { detectIntent, parseGoal, parseShopAdd, parseTaskAdd } from "./parser.js";
 import { buildReply } from "./responses.js";
+import { createShoppingCards, createTaskCard, isTrelloConfigured } from "./trelloService.js";
 import {
+  buildGoalCheckMessage,
   buildStatusBody,
   goalAlreadyExists,
   isMemoryEmpty,
@@ -12,7 +14,8 @@ const TYPE_LABEL = {
   "Long-term": "langfristig",
   "Mid-term": "mittelfristig",
   "Short-term": "kurzfristig",
-  Notes: "Notiz"
+  "Status / Progress Notes": "Status/Notiz",
+  "Reminder Rules": "Reminder-Regel"
 };
 
 function resolveUserId(userId) {
@@ -47,6 +50,60 @@ export async function handleMessage(input) {
     return statusReplyForUser(userId);
   }
 
+  if (intent === "goal_check") {
+    const msg = await buildGoalCheckMessage(userId);
+    return msg.trim() ? msg : buildReply("goal_check_empty");
+  }
+
+<<<<<<< HEAD
+  if (intent === "task_add" || intent === "shop_add") {
+    if (!isTrelloConfigured()) {
+      return buildReply("trello_not_configured");
+    }
+  }
+
+  if (intent === "task_add") {
+    const task = parseTaskAdd(raw);
+    if (!task) {
+      return buildReply("task_invalid");
+    }
+    try {
+      const card = await createTaskCard(task);
+      let dueHint = "";
+      if (task.dueISO) {
+        try {
+          const d = new Date(task.dueISO);
+          dueHint = ` (Fällig ${d.toLocaleDateString("de-DE")})`;
+        } catch {
+          dueHint = "";
+        }
+      }
+      return buildReply("task_created", { name: card.name || task.title, dueHint });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      return buildReply("trello_error", { detail: detail.slice(0, 120) });
+    }
+  }
+
+  if (intent === "shop_add") {
+    const items = parseShopAdd(raw);
+    if (!items) {
+      return buildReply("shop_invalid");
+    }
+    try {
+      await createShoppingCards(items);
+      return buildReply("shop_added", {
+        count: String(items.length),
+        items: items.join(", ")
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      return buildReply("trello_error", { detail: detail.slice(0, 120) });
+    }
+  }
+
+=======
+>>>>>>> 6e2f87cb2fbafe495e6eed6bb2e9a855974bea3f
   if (intent === "delete_goal" || intent === "update_goal") {
     return buildReply("command_wip");
   }

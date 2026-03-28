@@ -22,12 +22,23 @@ const WEAK_GOAL_WORDS = new Set([
 
 /**
  * @param {string} text
- * @returns {"status"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
+<<<<<<< HEAD
+ * @returns {"status"|"goal_check"|"task_add"|"shop_add"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
+=======
+ * @returns {"status"|"goal_check"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
+>>>>>>> 6e2f87cb2fbafe495e6eed6bb2e9a855974bea3f
  */
 export function detectIntent(text) {
   const t = normalizeText(text);
+  const cmd = t.replace(/:\s*$/, "").trim();
 
-  if (t === "status") return "status";
+  if (cmd === "status") return "status";
+  if (cmd.startsWith("goal check")) return "goal_check";
+<<<<<<< HEAD
+  if (t.startsWith("task add:")) return "task_add";
+  if (t.startsWith("shop add:")) return "shop_add";
+=======
+>>>>>>> 6e2f87cb2fbafe495e6eed6bb2e9a855974bea3f
   if (t.startsWith("delete ")) return "delete_goal";
   if (t.startsWith("update ")) return "update_goal";
 
@@ -86,7 +97,7 @@ export function parseGoal(text) {
 
   if (!type) {
     if (/^ziel\s*:/i.test(original) || /\bziel\s*:/i.test(original)) {
-      type = "Notes";
+      type = "Status / Progress Notes";
     } else {
       return null;
     }
@@ -103,4 +114,92 @@ export function parseGoal(text) {
   }
 
   return { type, content };
+}
+
+function endOfDayUTC(d) {
+  const x = new Date(d);
+  x.setUTCHours(23, 59, 59, 999);
+  return x.toISOString();
+}
+
+/**
+ * @param {string} phrase
+ * @returns {string | null} ISO due for Trello
+ */
+export function parseDueToISO(phrase) {
+  const p = String(phrase).trim().toLowerCase();
+  if (!p) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p)) {
+    const d = new Date(`${p}T23:59:59.000Z`);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  const now = new Date();
+  if (p === "tomorrow") {
+    now.setUTCDate(now.getUTCDate() + 1);
+    return endOfDayUTC(now);
+  }
+
+  const weeks = p.match(/^(\d+)\s*weeks?$/);
+  if (weeks) {
+    now.setUTCDate(now.getUTCDate() + 7 * parseInt(weeks[1], 10));
+    return endOfDayUTC(now);
+  }
+
+  const days = p.match(/^(\d+)\s*days?$/);
+  if (days) {
+    now.setUTCDate(now.getUTCDate() + parseInt(days[1], 10));
+    return endOfDayUTC(now);
+  }
+
+  return null;
+}
+
+/**
+ * TASK ADD: Titel | due: 2 weeks | extra wird zu Beschreibung
+ * @returns {{ title: string, desc: string, dueISO: string | null } | null}
+ */
+export function parseTaskAdd(text) {
+  const original = String(text).trim();
+  const m = original.match(/^\s*task\s+add\s*:\s*(.+)$/i);
+  if (!m) return null;
+  const rest = m[1].trim();
+  if (!rest) return null;
+
+  const parts = rest
+    .split("|")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const title = parts[0] ?? "";
+  if (!title) return null;
+
+  let desc = "";
+  let dueISO = null;
+  for (let i = 1; i < parts.length; i += 1) {
+    const seg = parts[i];
+    const dueMatch = seg.match(/^due\s*:\s*(.+)$/i);
+    if (dueMatch) {
+      dueISO = parseDueToISO(dueMatch[1].trim());
+      continue;
+    }
+    desc = desc ? `${desc}\n${seg}` : seg;
+  }
+
+  return { title, desc, dueISO };
+}
+
+/**
+ * SHOP ADD: Milch, Eier, Brot
+ * @returns {string[] | null}
+ */
+export function parseShopAdd(text) {
+  const original = String(text).trim();
+  const m = original.match(/^\s*shop\s+add\s*:\s*(.+)$/i);
+  if (!m) return null;
+  const items = m[1]
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return items.length ? items : null;
 }
