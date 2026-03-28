@@ -1,3 +1,6 @@
 node_modules
 .env
 .DS_Store
+
+# Per-user assistant memory (created at runtime)
+data/users/*.md

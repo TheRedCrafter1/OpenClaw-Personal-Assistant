@@ -1,7 +1,6 @@
 import express from "express";
-import { readFile } from "node:fs/promises";
 import { handleMessage } from "./handleMessage.js";
-import { ensureMemoryFile, MEMORY_PATH } from "./memory.js";
+import { ensureMemoryFile, readMemoryContent } from "./memory.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,31 +17,36 @@ app.get("/", (_req, res) => {
 
 app.post("/message", async (req, res) => {
   const text = req.body?.text ?? "";
+  const userId = req.body?.userId ?? "global";
   try {
-    const reply = await handleMessage(text);
+    const reply = await handleMessage({ text, userId });
     return res.json({ reply });
-  } catch {
-    return res.status(500).json({ reply: "Fehler bei der Verarbeitung der Nachricht." });
+  } catch (err) {
+    console.error("POST /message:", err);
+    return res.status(500).json({ reply: "Da ist gerade etwas schiefgelaufen." });
   }
 });
 
 app.post("/webhook", async (req, res) => {
   const text = req.body?.text ?? "";
+  const userId = req.body?.userId ?? "global";
   try {
-    const reply = await handleMessage(text);
+    const reply = await handleMessage({ text, userId });
     return res.json({ reply });
-  } catch {
-    return res.status(500).json({ reply: "Fehler bei der Webhook-Verarbeitung." });
+  } catch (err) {
+    console.error("POST /webhook:", err);
+    return res.status(500).json({ reply: "Da ist gerade etwas schiefgelaufen." });
   }
 });
 
-app.get("/memory", async (_req, res) => {
+app.get("/memory", async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId : "global";
   try {
-    await ensureMemoryFile();
-    const memoryContent = await readFile(MEMORY_PATH, "utf8");
+    await ensureMemoryFile(userId);
+    const memoryContent = await readMemoryContent(userId);
     return res.type("text/plain").send(memoryContent);
   } catch {
-    return res.status(500).send("Konnte MEMORY.md nicht laden.");
+    return res.status(500).send("Konnte Memory-Datei nicht laden.");
   }
 });
 

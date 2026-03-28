@@ -1,12 +1,10 @@
-import { readFile } from "node:fs/promises";
 import { detectIntent, parseGoal } from "./parser.js";
 import { buildReply } from "./responses.js";
 import {
-  MEMORY_PATH,
   buildStatusBody,
-  ensureMemoryFile,
   goalAlreadyExists,
   isMemoryEmpty,
+  readMemoryContent,
   saveGoal
 } from "./memory.js";
 
@@ -17,18 +15,28 @@ const TYPE_LABEL = {
   Notes: "Notiz"
 };
 
-async function statusReplyFromDisk() {
-  await ensureMemoryFile();
-  const memoryContent = await readFile(MEMORY_PATH, "utf8");
+function resolveUserId(userId) {
+  const s = String(userId ?? "global").trim();
+  return s || "global";
+}
+
+async function statusReplyForUser(userId) {
+  const memoryContent = await readMemoryContent(userId);
   if (isMemoryEmpty(memoryContent)) {
     return buildReply("status_empty");
   }
   return buildReply("status_intro", { body: buildStatusBody(memoryContent) });
 }
 
-/** @param {string} text */
-export async function handleMessage(text) {
-  const raw = String(text ?? "").trim();
+/**
+ * @param {{ text?: string, userId?: string } | string} input
+ * Legacy: `handleMessage("text")` still works (uses user `global`).
+ */
+export async function handleMessage(input) {
+  const payload = typeof input === "string" ? { text: input } : input ?? {};
+  const userId = resolveUserId(payload.userId);
+  const raw = String(payload.text ?? "").trim();
+
   if (!raw) {
     return buildReply("empty_message");
   }
@@ -36,7 +44,7 @@ export async function handleMessage(text) {
   const intent = detectIntent(raw);
 
   if (intent === "status" || intent === "list_goals") {
-    return statusReplyFromDisk();
+    return statusReplyForUser(userId);
   }
 
   if (intent === "delete_goal" || intent === "update_goal") {
@@ -50,7 +58,7 @@ export async function handleMessage(text) {
     }
 
     const typeLabel = TYPE_LABEL[parsed.type] ?? parsed.type;
-    const exists = await goalAlreadyExists(parsed.type, parsed.content);
+    const exists = await goalAlreadyExists(userId, parsed.type, parsed.content);
     if (exists) {
       return buildReply("goal_duplicate", {
         typeLabel,
@@ -58,7 +66,7 @@ export async function handleMessage(text) {
       });
     }
 
-    const saved = await saveGoal(parsed.type, parsed.content);
+    const saved = await saveGoal(userId, parsed.type, parsed.content);
     if (!saved) {
       return buildReply("goal_duplicate", {
         typeLabel,

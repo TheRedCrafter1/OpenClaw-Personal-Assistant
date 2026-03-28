@@ -1,9 +1,22 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export const MEMORY_PATH = path.join(process.cwd(), "memory", "MEMORY.md");
+const DATA_DIR = path.join(process.cwd(), "data");
+export const USERS_DIR = path.join(DATA_DIR, "users");
+const LEGACY_MEMORY_PATH = path.join(process.cwd(), "memory", "MEMORY.md");
 
-export const MEMORY_TEMPLATE = `# MEMORY
+/** @param {string} [userId] */
+export function sanitizeUserId(userId = "global") {
+  const raw = String(userId ?? "global").trim() || "global";
+  let safe = raw.replace(/^whatsapp:/i, "whatsapp_").replace(/[^\w-]/g, "_");
+  if (!safe) return "global";
+  return safe;
+}
+
+/** @param {string} userId raw id for display in file header */
+function memoryTemplate(userLabel) {
+  return `# Memory
+User: ${userLabel}
 
 ## Long-term
 - 
@@ -17,15 +30,47 @@ export const MEMORY_TEMPLATE = `# MEMORY
 ## Notes
 - 
 `;
+}
 
-export async function ensureMemoryFile() {
-  await mkdir(path.dirname(MEMORY_PATH), { recursive: true });
+/** @param {string} [userId] */
+export function getMemoryPath(userId = "global") {
+  const safe = sanitizeUserId(userId);
+  return path.join(USERS_DIR, `${safe}.md`);
+}
+
+/**
+ * @param {string} [userId]
+ * @returns {Promise<string>} absolute file path
+ */
+export async function ensureMemoryFile(userId = "global") {
+  await mkdir(USERS_DIR, { recursive: true });
+  const filePath = getMemoryPath(userId);
 
   try {
-    await readFile(MEMORY_PATH, "utf8");
+    await readFile(filePath, "utf8");
+    return filePath;
   } catch {
-    await writeFile(MEMORY_PATH, MEMORY_TEMPLATE, "utf8");
+    const displayId = String(userId ?? "global").trim() || "global";
+
+    if (sanitizeUserId(userId) === "global") {
+      try {
+        const legacy = await readFile(LEGACY_MEMORY_PATH, "utf8");
+        await writeFile(filePath, legacy, "utf8");
+        return filePath;
+      } catch {
+        /* no legacy file */
+      }
+    }
+
+    await writeFile(filePath, memoryTemplate(displayId), "utf8");
+    return filePath;
   }
+}
+
+/** @param {string} [userId] */
+export async function readMemoryContent(userId = "global") {
+  await ensureMemoryFile(userId);
+  return readFile(getMemoryPath(userId), "utf8");
 }
 
 function addGoalToSection(content, section, goalText) {
@@ -119,22 +164,22 @@ export function buildStatusBody(memoryContent) {
   ].join("\n");
 }
 
-export async function goalAlreadyExists(section, goalText) {
-  await ensureMemoryFile();
-  const memoryContent = await readFile(MEMORY_PATH, "utf8");
+export async function goalAlreadyExists(userId, section, goalText) {
+  const memoryContent = await readMemoryContent(userId);
   const normalized = goalText.trim().toLowerCase();
   return getSectionGoals(memoryContent, section).some(
     (g) => g.trim().toLowerCase() === normalized
   );
 }
 
-export async function saveGoal(section, goalText) {
-  await ensureMemoryFile();
-  const memoryContent = await readFile(MEMORY_PATH, "utf8");
+export async function saveGoal(userId, section, goalText) {
+  await ensureMemoryFile(userId);
+  const filePath = getMemoryPath(userId);
+  const memoryContent = await readFile(filePath, "utf8");
   const nextContent = addGoalToSection(memoryContent, section, goalText);
   if (nextContent === memoryContent) {
     return false;
   }
-  await writeFile(MEMORY_PATH, nextContent, "utf8");
+  await writeFile(filePath, nextContent, "utf8");
   return true;
 }
