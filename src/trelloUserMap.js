@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -23,7 +23,9 @@ async function loadAll() {
 
 async function saveAll(/** @type Record<string, MappedCard[]> */ data) {
   await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(MAP_PATH, JSON.stringify(data, null, 2), "utf8");
+  const tmp = `${MAP_PATH}.tmp`;
+  await writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
+  await rename(tmp, MAP_PATH);
 }
 
 function norm(s) {

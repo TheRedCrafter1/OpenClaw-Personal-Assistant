@@ -14,7 +14,7 @@ Basis-URL ersetzen: `https://DEIN_HOST:3000` (oder nur intern `http://127.0.0.1:
 
 ### Hardening (E1)
 
-`/reminder/dispatch` und `/reminder/broadcast` können zusätzlich `skipped` liefern: `outside_window`, `cooldown`, `duplicate_text` (siehe [E-HARDENING-DEBUG.md](./E-HARDENING-DEBUG.md)). Dann **keinen** WhatsApp-Versand auslösen, wenn `reply` leer ist.
+`/reminder/dispatch` und `/reminder/broadcast` können zusätzlich `skipped` liefern: `outside_window`, `paused`, `recent_progress`, `cooldown_active`, `duplicate_text_blocked`, `outbound_failed` (siehe [E-HARDENING-DEBUG.md](./E-HARDENING-DEBUG.md)). Dann **keinen** WhatsApp-Versand auslösen, wenn `reply` leer ist.
 
 ## Gemeinsame HTTP-Optionen (n8n „HTTP Request“)
 
@@ -75,7 +75,7 @@ Eine der beiden Varianten:
 }
 ```
 
-Wenn du **kein** `REMINDER_OUTBOUND_URL` nutzt, musst du den Text selbst an WhatsApp schicken (siehe Phase 4).
+Wenn du **kein** `REMINDER_OUTBOUND_URL` nutzt, musst du den Text selbst an WhatsApp schicken (siehe Phase 4) und danach optional per `POST /reminder/mark-sent` bestätigen (für Dedupe/Cooldown).
 
 ---
 
@@ -117,6 +117,14 @@ Typischer zweiter Schritt nach `broadcast`:
    - `To` = `{{ $json.userId }}`  
    - `Body` = `{{ $json.reply }}`  
    - Sandbox-/Production-From wie bei euren anderen Flows.
+5. Optional danach (nur bei erfolgreichem Twilio-Request): **HTTP POST** ` /reminder/mark-sent` mit
+
+```json
+{
+  "userId": "={{ $json.userId }}",
+  "text": "={{ $json.reply }}"
+}
+```
 
 So bleibt der **Reminder-Text** beim Assistant-Server; **Versand** liegt sichtbar in n8n (gut zum Debuggen).
 

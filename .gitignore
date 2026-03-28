@@ -8,3 +8,4 @@ data/users/*.md
 # Hardening / runtime state (E1)
 data/reminder-state.json
 data/trello-card-map.json
+data/archive/progress/*.log

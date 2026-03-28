@@ -4,8 +4,11 @@
 import {
   detectIntent,
   parseGoal,
+  parsePauseReminder,
   parseShopAdd,
-  parseTaskAdd
+  parseTaskAdd,
+  parseTaskMove,
+  parseTaskUpdate
 } from "../src/parser.js";
 import { parseProgressNoteCommand, parseStructuredProgress } from "../src/progressParser.js";
 import { buildReply } from "../src/responses.js";
@@ -24,9 +27,20 @@ if (!parseProgressNoteCommand("NOTE: x")) throw new Error("parseProgressNoteComm
 if (!parseStructuredProgress("ist leider blockiert")) throw new Error("parseStructuredProgress");
 
 if (detectIntent("TASK ADD: x") !== "task_add") throw new Error("detectIntent task_add");
+if (detectIntent("TASK MOVE: A -> done") !== "task_move") throw new Error("detectIntent task_move");
+if (detectIntent("TASK UPDATE: A | note: x") !== "task_update")
+  throw new Error("detectIntent task_update");
+if (detectIntent("PAUSE REMINDER 2d") !== "reminder_pause")
+  throw new Error("detectIntent reminder_pause");
+if (detectIntent("RESUME REMINDER") !== "reminder_resume")
+  throw new Error("detectIntent reminder_resume");
+if (detectIntent("HELP") !== "help") throw new Error("detectIntent help");
 if (detectIntent("SHOP ADD: a, b") !== "shop_add") throw new Error("detectIntent shop_add");
 if (detectIntent("STATUS:") !== "status") throw new Error("detectIntent status:");
 if (!parseTaskAdd("TASK ADD: T | due: 1 days")?.title) throw new Error("parseTaskAdd");
+if (!parseTaskMove("TASK MOVE: T -> done")?.title) throw new Error("parseTaskMove");
+if (!parseTaskUpdate("TASK UPDATE: T | note: x")?.title) throw new Error("parseTaskUpdate");
+if (!parsePauseReminder("PAUSE REMINDER 2d")?.hours) throw new Error("parsePauseReminder");
 if (!parseShopAdd("SHOP ADD: x, y")?.length) throw new Error("parseShopAdd");
 if (!parseGoal("kurzfristig etwas tun")) throw new Error("parseGoal");
 

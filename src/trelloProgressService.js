@@ -121,7 +121,7 @@ export async function applyStructuredProgressToTrello(kind, userText, userId) {
 
   if (!match) {
     logAssistant("trello_progress_match_miss", { userId });
-    return { skipped: "no_card_match" };
+    return { skipped: "trello_match_not_found" };
   }
 
   if (kind === "done") {

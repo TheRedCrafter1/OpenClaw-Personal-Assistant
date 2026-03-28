@@ -1,6 +1,6 @@
 import { logAssistant } from "./assistantLog.js";
-import { listMemoryUserIds } from "./memory.js";
-import { shouldSkipReminderDedupe, recordReminderSent } from "./reminderState.js";
+import { getLastProgressNoteDate, listMemoryUserIds } from "./memory.js";
+import { getReminderPauseStatus, shouldSkipReminderDedupe } from "./reminderState.js";
 import { buildReminderMessage } from "./reminderService.js";
 import {
   isReminderWindowEnforced,
@@ -26,15 +26,28 @@ export function reminderAuthMiddleware(req, res, next) {
 
 /**
  * @param {string} userId
- * @param {{ record?: boolean }} [options] record=true → Zeitfenster + Dedupe + State (dispatch/broadcast)
+ * @param {{ enforceGuards?: boolean }} [options]
  * @returns {Promise<{ userId: string, text: string | null, skipped?: string }>}
  */
-export async function runReminderForUser(userId, options = {}) {
-  const record = options.record === true;
+function minProgressAgeDays() {
+  const n = parseInt(process.env.REMINDER_MIN_PROGRESS_AGE_DAYS ?? "5", 10);
+  return Number.isFinite(n) && n >= 0 ? n : 5;
+}
 
-  if (record && isReminderWindowEnforced() && !isWithinReminderSendWindow()) {
+export async function runReminderForUser(userId, options = {}) {
+  const enforceGuards = options.enforceGuards !== false;
+
+  if (enforceGuards && isReminderWindowEnforced() && !isWithinReminderSendWindow()) {
     logAssistant("reminder_skip", { userId, reason: "outside_window" });
     return { userId, text: null, skipped: "outside_window" };
+  }
+
+  if (enforceGuards) {
+    const p = await getReminderPauseStatus(userId);
+    if (p.paused) {
+      logAssistant("reminder_skip", { userId, reason: "paused" });
+      return { userId, text: null, skipped: "paused" };
+    }
   }
 
   const text = await buildReminderMessage(userId);
@@ -43,14 +56,23 @@ export async function runReminderForUser(userId, options = {}) {
     return { userId, text: null, skipped: "no_goals" };
   }
 
-  if (record) {
+  if (enforceGuards) {
+    const lastProgress = await getLastProgressNoteDate(userId);
+    if (lastProgress) {
+      const ageMs = Date.now() - lastProgress.getTime();
+      const minAge = minProgressAgeDays() * 24 * 3600 * 1000;
+      if (ageMs < minAge) {
+        logAssistant("reminder_skip", { userId, reason: "recent_progress" });
+        return { userId, text: null, skipped: "recent_progress" };
+      }
+    }
+
     const d = await shouldSkipReminderDedupe(userId, text);
     if (d.skip) {
       logAssistant("reminder_skip", { userId, reason: d.reason });
       return { userId, text: null, skipped: d.reason };
     }
-    await recordReminderSent(userId, text);
-    logAssistant("reminder_dispatch", { userId, textLen: text.length });
+    logAssistant("reminder_candidate", { userId, textLen: text.length });
   } else {
     logAssistant("reminder_preview", { userId, textLen: text.length });
   }
@@ -59,7 +81,7 @@ export async function runReminderForUser(userId, options = {}) {
 }
 
 /**
- * @param {{ record?: boolean }} [options]
+ * @param {{ enforceGuards?: boolean }} [options]
  * @returns {Promise<{ userId: string, text: string }[]>}
  */
 export async function runRemindersForAllUsers(options = {}) {

@@ -22,7 +22,7 @@ const WEAK_GOAL_WORDS = new Set([
 
 /**
  * @param {string} text
- * @returns {"status"|"goal_check"|"progress_note"|"task_add"|"shop_add"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
+ * @returns {"help"|"status"|"goal_check"|"reminder_pause"|"reminder_resume"|"progress_note"|"task_add"|"task_move"|"task_update"|"shop_add"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
  */
 export function detectIntent(text) {
   const trimmed = String(text).trim();
@@ -30,10 +30,15 @@ export function detectIntent(text) {
   const cmd = t.replace(/:\s*$/, "").trim();
 
   if (/^(note|notiz|fortschritt)\s*:/i.test(trimmed)) return "progress_note";
+  if (cmd === "help" || cmd === "hilfe") return "help";
+  if (cmd === "resume reminder") return "reminder_resume";
+  if (cmd.startsWith("pause reminder") || cmd.startsWith("snooze")) return "reminder_pause";
 
   if (cmd === "status") return "status";
   if (cmd.startsWith("goal check")) return "goal_check";
   if (t.startsWith("task add:")) return "task_add";
+  if (t.startsWith("task move:")) return "task_move";
+  if (t.startsWith("task update:")) return "task_update";
   if (t.startsWith("shop add:")) return "shop_add";
   if (t.startsWith("delete ")) return "delete_goal";
   if (t.startsWith("update ")) return "update_goal";
@@ -198,4 +203,64 @@ export function parseShopAdd(text) {
     .map((s) => s.trim())
     .filter(Boolean);
   return items.length ? items : null;
+}
+
+/**
+ * TASK MOVE: Titel -> done
+ * TASK MOVE: Titel | done
+ * @returns {{ title: string, target: "done" } | null}
+ */
+export function parseTaskMove(text) {
+  const original = String(text).trim();
+  const m = original.match(/^\s*task\s+move\s*:\s*(.+?)\s*(?:->|\|)\s*(done|erledigt)\s*$/i);
+  if (!m) return null;
+  const title = m[1].trim();
+  if (!title) return null;
+  return { title, target: "done" };
+}
+
+/**
+ * TASK UPDATE: Titel | note: Text
+ * TASK UPDATE: Titel | Text
+ * @returns {{ title: string, note: string } | null}
+ */
+export function parseTaskUpdate(text) {
+  const original = String(text).trim();
+  const m = original.match(/^\s*task\s+update\s*:\s*(.+)$/i);
+  if (!m) return null;
+  const rest = m[1].trim();
+  if (!rest) return null;
+
+  const parts = rest
+    .split("|")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const title = parts[0] ?? "";
+  if (!title) return null;
+
+  const rawNote = parts.slice(1).join(" | ").replace(/^note\s*:\s*/i, "").trim();
+  if (!rawNote) return null;
+  return { title, note: rawNote };
+}
+
+/**
+ * PAUSE REMINDER
+ * PAUSE REMINDER 7d
+ * SNOOZE 48h
+ * @returns {{ hours: number, label: string } | null}
+ */
+export function parsePauseReminder(text) {
+  const s = String(text).trim().toLowerCase();
+  if (s === "pause reminder" || s === "pause reminder:" || s === "snooze") {
+    return { hours: 72, label: "72h" };
+  }
+
+  const m = s.match(/^(?:pause\s+reminder|snooze)\s+(\d+)\s*([dh])\s*$/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const unit = m[2].toLowerCase();
+  const hours = unit === "d" ? n * 24 : n;
+  const label = unit === "d" ? `${n}d` : `${n}h`;
+  return { hours, label };
 }

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   MEMORY_SECTION_ORDER,
@@ -11,6 +11,7 @@ import { triggerMemorySync } from "./syncTrigger.js";
 const DATA_DIR = path.join(process.cwd(), "data");
 export const USERS_DIR = path.join(DATA_DIR, "users");
 const LEGACY_MEMORY_PATH = path.join(process.cwd(), "memory", "MEMORY.md");
+const PROGRESS_ARCHIVE_DIR = path.join(DATA_DIR, "archive", "progress");
 
 const GOAL_SECTIONS = ["Long-term", "Mid-term", "Short-term"];
 
@@ -181,9 +182,45 @@ export async function appendStatusProgressNote(userId, line) {
   }
   const doc = await loadMemoryDoc(userId);
   const prev = getSectionGoalsFromDoc(doc, STATUS_SECTION);
-  doc.sections[STATUS_SECTION] = [...prev, note];
+  const maxNotes = parseInt(process.env.MEMORY_PROGRESS_NOTES_MAX ?? "120", 10);
+  const limit = Number.isFinite(maxNotes) && maxNotes > 10 ? maxNotes : 120;
+  const next = [...prev, note];
+
+  if (next.length > limit) {
+    const overflow = next.slice(0, next.length - limit);
+    doc.sections[STATUS_SECTION] = next.slice(-limit);
+    try {
+      await mkdir(PROGRESS_ARCHIVE_DIR, { recursive: true });
+      const f = path.join(PROGRESS_ARCHIVE_DIR, `${sanitizeUserId(userId)}.log`);
+      await appendFile(f, `${overflow.join("\n")}\n`, "utf8");
+    } catch {
+      // archive errors must not block note writes
+    }
+  } else {
+    doc.sections[STATUS_SECTION] = next;
+  }
   await writeMemoryDoc(doc, userId);
   return true;
+}
+
+/**
+ * Letzten ISO-Datumspräfix-Eintrag aus Status / Progress Notes lesen.
+ * Erwartet Notizen wie `YYYY-MM-DD: ...`.
+ * @param {string} userId
+ * @returns {Promise<Date | null>}
+ */
+export async function getLastProgressNoteDate(userId) {
+  const doc = await loadMemoryDoc(userId);
+  const notes = getSectionGoalsFromDoc(doc, STATUS_SECTION);
+  for (let i = notes.length - 1; i >= 0; i -= 1) {
+    const m = String(notes[i]).match(/^(\d{4}-\d{2}-\d{2})\b/);
+    if (!m) continue;
+    const d = new Date(`${m[1]}T00:00:00.000Z`);
+    if (!Number.isNaN(d.getTime())) {
+      return d;
+    }
+  }
+  return null;
 }
 
 /** User-IDs aus `User:`-Zeile jeder `data/users/*.md` */

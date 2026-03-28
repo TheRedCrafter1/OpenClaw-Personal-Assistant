@@ -1,9 +1,24 @@
-import { detectIntent, parseGoal, parseShopAdd, parseTaskAdd } from "./parser.js";
+import {
+  detectIntent,
+  parseGoal,
+  parsePauseReminder,
+  parseShopAdd,
+  parseTaskAdd,
+  parseTaskMove,
+  parseTaskUpdate
+} from "./parser.js";
 import { parseProgressNoteCommand, parseStructuredProgress } from "./progressParser.js";
 import { buildReply } from "./responses.js";
 import { applyStructuredProgressToTrello } from "./trelloProgressService.js";
-import { createShoppingCards, createTaskCard, isTrelloConfigured } from "./trelloService.js";
+import {
+  appendTaskNoteByTitle,
+  createShoppingCards,
+  createTaskCard,
+  isTrelloConfigured,
+  moveTaskByTitleToDone
+} from "./trelloService.js";
 import { registerTaskCard } from "./trelloUserMap.js";
+import { clearReminderPause, setReminderPause } from "./reminderState.js";
 import {
   appendStatusProgressNote,
   buildGoalCheckMessage,
@@ -54,12 +69,36 @@ export async function handleMessage(input) {
     return statusReplyForUser(userId);
   }
 
+  if (intent === "help") {
+    return buildReply("help");
+  }
+
+  if (intent === "reminder_pause") {
+    const p = parsePauseReminder(raw);
+    if (!p) {
+      return "Nutze z. B. *PAUSE REMINDER 3d* oder *SNOOZE 24h*.";
+    }
+    const until = await setReminderPause(userId, p.hours);
+    const untilDate = new Date(until).toLocaleString("de-DE");
+    return buildReply("reminder_paused", { forLabel: p.label, untilDate });
+  }
+
+  if (intent === "reminder_resume") {
+    const changed = await clearReminderPause(userId);
+    return changed ? buildReply("reminder_resumed") : buildReply("reminder_already_resumed");
+  }
+
   if (intent === "goal_check") {
     const msg = await buildGoalCheckMessage(userId);
     return msg.trim() ? msg : buildReply("goal_check_empty");
   }
 
-  if (intent === "task_add" || intent === "shop_add") {
+  if (
+    intent === "task_add" ||
+    intent === "shop_add" ||
+    intent === "task_move" ||
+    intent === "task_update"
+  ) {
     if (!isTrelloConfigured()) {
       return buildReply("trello_not_configured");
     }
@@ -105,6 +144,42 @@ export async function handleMessage(input) {
         count: String(items.length),
         items: items.join(", ")
       });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const safe = detail.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+      return buildReply("trello_error", { detail: safe });
+    }
+  }
+
+  if (intent === "task_move") {
+    const parsed = parseTaskMove(raw);
+    if (!parsed) {
+      return buildReply("task_move_invalid");
+    }
+    try {
+      const moved = await moveTaskByTitleToDone(parsed.title);
+      if (!moved) {
+        return buildReply("task_move_not_found");
+      }
+      return buildReply("task_move_done", { name: moved.name });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const safe = detail.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+      return buildReply("trello_error", { detail: safe });
+    }
+  }
+
+  if (intent === "task_update") {
+    const parsed = parseTaskUpdate(raw);
+    if (!parsed) {
+      return buildReply("task_update_invalid");
+    }
+    try {
+      const updated = await appendTaskNoteByTitle(parsed.title, parsed.note);
+      if (!updated) {
+        return buildReply("task_update_not_found");
+      }
+      return buildReply("task_update_saved", { name: updated.name });
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       const safe = detail.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);

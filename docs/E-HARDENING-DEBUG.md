@@ -5,9 +5,11 @@
 | Thema | Verhalten |
 |-------|-----------|
 | **Reminder-Dedupe** | Pro User: letzter Versand + Hash des Texts in `data/reminder-state.json` (nicht im Git). |
-| **Cooldown** | Standard **48 h** zwischen „echten“ Remindern (`/reminder/dispatch`, `/reminder/broadcast` mit `record`). |
+| **Cooldown** | Standard **48 h** zwischen „echten“ Remindern (`/reminder/dispatch`, `/reminder/broadcast`, nur mit Guard). |
 | **Gleicher Text** | Optional: identischer Reminder-Text blockiert zusätzlich für `REMINDER_IDENTICAL_TEXT_HOURS` (Default **168**), *nachdem* der Cooldown abgelaufen ist. |
-| **Zeitfenster** | Nur bei **record=true**: Stunde muss zwischen `REMINDER_HOUR_START` und `REMINDER_HOUR_END` in `REMINDER_TZ` liegen (Default **8–21**, **Europe/Berlin**). |
+| **Zeitfenster** | Für Dispatch/Broadcast (Guard aktiv): Stunde muss zwischen `REMINDER_HOUR_START` und `REMINDER_HOUR_END` in `REMINDER_TZ` liegen (Default **8–21**, **Europe/Berlin**). |
+| **Recent-Progress Guard** | Reminder wird geskippt, wenn letzter Progress jünger als `REMINDER_MIN_PROGRESS_AGE_DAYS` ist (Default **5**). |
+| **Pause/Snooze** | User-Commands `PAUSE REMINDER 3d` / `SNOOZE 24h` / `RESUME REMINDER`. |
 | **Preview** | `/reminder/preview` **ohne** Fenster/Dedupe – nur zum Testen des Textes. |
 | **Logging** | Mit `ASSISTANT_LOG=1` eine JSON-Zeile pro Ereignis auf stdout. |
 | **Trello-Map** | Nach jedem `TASK ADD` wird Card-ID + Titel in `data/trello-card-map.json` gespeichert; Fortschritt nutzt zuerst die Map, dann Fuzzy-Match. |
@@ -20,6 +22,7 @@
 | `REMINDER_DEDUPE` | an (`0` = aus) | Cooldown/State komplett deaktivieren |
 | `REMINDER_COOLDOWN_HOURS` | `48` | Mindestabstand zwischen Remindern pro User |
 | `REMINDER_IDENTICAL_TEXT_HOURS` | `168` | Block gleicher Text (Hash) nach Ablauf des Cooldowns |
+| `REMINDER_MIN_PROGRESS_AGE_DAYS` | `5` | Nur erinnern, wenn letzter Progress alt genug ist |
 | `REMINDER_WINDOW_DISABLED` | `0` | `1` = kein Zeitfenster |
 | `REMINDER_TZ` | `Europe/Berlin` | IANA-Zeitzone |
 | `REMINDER_HOUR_START` / `END` | `8` / `21` | Erlaubte lokale Stunden (inkl.) |
@@ -30,7 +33,8 @@
 ## Log-Tags (bei `ASSISTANT_LOG=1`)
 
 - `reminder_preview` / `reminder_dispatch`
-- `reminder_skip` mit `reason`: `outside_window`, `no_goals`, `cooldown`, `duplicate_text`
+- `reminder_candidate`
+- `reminder_skip` mit `reason`: `outside_window`, `paused`, `no_goals`, `recent_progress`, `cooldown_active`, `duplicate_text_blocked`
 - `reminder_outbound` / `reminder_outbound_fail`
 - `trello_progress_match` (`source`: `card_map` | `fuzzy`)
 - `trello_progress_match_miss`
@@ -41,8 +45,11 @@
 `skipped` in JSON kann jetzt zusätzlich sein:
 
 - `outside_window` – außerhalb des Sendezeitfensters
-- `cooldown` – Cooldown aktiv
-- `duplicate_text` – gleicher Reminder-Text noch im Sperrfenster
+- `paused` – Reminder per User pausiert
+- `recent_progress` – letzter Progress zu frisch
+- `cooldown_active` – Cooldown aktiv
+- `duplicate_text_blocked` – gleicher Reminder-Text noch im Sperrfenster
+- `outbound_failed` – Versand fehlgeschlagen
 
 ## Live-Checks
 
