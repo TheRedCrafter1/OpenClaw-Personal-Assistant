@@ -1,7 +1,7 @@
 # MEMORY
 
 ## Long-term
-- 
+- fitter werden
 
 ## Mid-term
 - 
