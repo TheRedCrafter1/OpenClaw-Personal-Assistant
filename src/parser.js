@@ -22,11 +22,14 @@ const WEAK_GOAL_WORDS = new Set([
 
 /**
  * @param {string} text
- * @returns {"status"|"goal_check"|"task_add"|"shop_add"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
+ * @returns {"status"|"goal_check"|"progress_note"|"task_add"|"shop_add"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
  */
 export function detectIntent(text) {
+  const trimmed = String(text).trim();
   const t = normalizeText(text);
   const cmd = t.replace(/:\s*$/, "").trim();
+
+  if (/^(note|notiz|fortschritt)\s*:/i.test(trimmed)) return "progress_note";
 
   if (cmd === "status") return "status";
   if (cmd.startsWith("goal check")) return "goal_check";

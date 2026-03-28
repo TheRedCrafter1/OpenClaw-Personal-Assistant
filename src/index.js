@@ -1,6 +1,13 @@
 import express from "express";
 import { handleMessage } from "./handleMessage.js";
 import { ensureMemoryFile, readMemoryContent } from "./memory.js";
+import { buildReminderMessage } from "./reminderService.js";
+import {
+  postReminderOutbound,
+  reminderAuthMiddleware,
+  runReminderForUser,
+  runRemindersForAllUsers
+} from "./reminderRunner.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,6 +54,52 @@ app.get("/memory", async (req, res) => {
     return res.type("text/plain").send(memoryContent);
   } catch {
     return res.status(500).send("Konnte Memory-Datei nicht laden.");
+  }
+});
+
+app.post("/reminder/preview", reminderAuthMiddleware, async (req, res) => {
+  const userId = req.body?.userId ?? "global";
+  try {
+    const text = await buildReminderMessage(userId);
+    if (!text) {
+      return res.json({ reply: "", skipped: "no_goals" });
+    }
+    return res.json({ reply: text });
+  } catch (err) {
+    console.error("POST /reminder/preview:", err);
+    return res.status(500).json({ error: "reminder_preview_failed" });
+  }
+});
+
+app.post("/reminder/dispatch", reminderAuthMiddleware, async (req, res) => {
+  const userId = req.body?.userId ?? "global";
+  const send = req.body?.send === true;
+  try {
+    const r = await runReminderForUser(userId);
+    if (!r.text) {
+      return res.json({ reply: "", skipped: r.skipped, outbound: null });
+    }
+    const outbound = send ? await postReminderOutbound(userId, r.text) : null;
+    return res.json({ reply: r.text, outbound });
+  } catch (err) {
+    console.error("POST /reminder/dispatch:", err);
+    return res.status(500).json({ error: "reminder_dispatch_failed" });
+  }
+});
+
+app.post("/reminder/broadcast", reminderAuthMiddleware, async (req, res) => {
+  const send = req.body?.send === true;
+  try {
+    const list = await runRemindersForAllUsers();
+    const results = [];
+    for (const { userId: uid, text } of list) {
+      const outbound = send ? await postReminderOutbound(uid, text) : null;
+      results.push({ userId: uid, reply: text, outbound });
+    }
+    return res.json({ count: results.length, results });
+  } catch (err) {
+    console.error("POST /reminder/broadcast:", err);
+    return res.status(500).json({ error: "reminder_broadcast_failed" });
   }
 });
 

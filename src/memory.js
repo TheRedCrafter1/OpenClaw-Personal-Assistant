@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   MEMORY_SECTION_ORDER,
@@ -165,6 +165,50 @@ export async function saveGoal(userId, section, goalText) {
   doc.sections[section] = [...list, goalText.trim()];
   await writeMemoryDoc(doc, userId);
   return true;
+}
+
+const STATUS_SECTION = "Status / Progress Notes";
+
+/**
+ * Eine Zeile in Status / Progress Notes (mit Datum o. Ä. im Text).
+ * @param {string} userId
+ * @param {string} line
+ */
+export async function appendStatusProgressNote(userId, line) {
+  const note = String(line).trim();
+  if (!note) {
+    return false;
+  }
+  const doc = await loadMemoryDoc(userId);
+  const prev = getSectionGoalsFromDoc(doc, STATUS_SECTION);
+  doc.sections[STATUS_SECTION] = [...prev, note];
+  await writeMemoryDoc(doc, userId);
+  return true;
+}
+
+/** User-IDs aus `User:`-Zeile jeder `data/users/*.md` */
+export async function listMemoryUserIds() {
+  await mkdir(USERS_DIR, { recursive: true });
+  let names;
+  try {
+    names = await readdir(USERS_DIR);
+  } catch {
+    return [];
+  }
+  const ids = [];
+  for (const f of names) {
+    if (!f.endsWith(".md")) continue;
+    try {
+      const raw = await readFile(path.join(USERS_DIR, f), "utf8");
+      const m = raw.match(/^User:\s*(.+)$/m);
+      if (m) {
+        ids.push(m[1].trim());
+      }
+    } catch {
+      /* skip */
+    }
+  }
+  return [...new Set(ids)].filter(Boolean);
 }
 
 /**

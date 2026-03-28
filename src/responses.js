@@ -35,10 +35,18 @@ export function buildReply(kind, data = {}) {
       return `Task in Trello: *${data.name}*${data.dueHint ?? ""}`;
     case "shop_added":
       return `Zur Einkaufsliste (${data.count}): *${data.items}*.`;
+    case "note_invalid":
+      return "Schreib eine Notiz nach *NOTE:*, z. B. *NOTE: Budget-Plan noch offen, mache ich Montag.*";
+    case "progress_saved":
+      return "Hab ich als Fortschrittsnotiz gespeichert.";
+    case "progress_auto_saved":
+      return `Als Fortschritt notiert (*${data.label}*).`;
+    case "reminder_no_goals":
+      return "Keine Ziele für einen Reminder – erst Goals anlegen.";
     case "unknown":
       return (
         "Das habe ich noch nicht ganz verstanden. " +
-        "Befehle: *GOAL SET:*, *STATUS:*, *GOAL CHECK:*, *TASK ADD:*, *SHOP ADD:*, plus Zeitfenster-Ziele."
+        "Befehle: *GOAL SET:*, *STATUS:*, *GOAL CHECK:*, *NOTE:*, *TASK ADD:*, *SHOP ADD:*, plus Zeitfenster-Ziele."
       );
     case "command_wip":
       return (

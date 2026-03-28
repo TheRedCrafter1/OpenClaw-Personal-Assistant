@@ -1,7 +1,9 @@
 import { detectIntent, parseGoal, parseShopAdd, parseTaskAdd } from "./parser.js";
+import { parseProgressNoteCommand, parseStructuredProgress } from "./progressParser.js";
 import { buildReply } from "./responses.js";
 import { createShoppingCards, createTaskCard, isTrelloConfigured } from "./trelloService.js";
 import {
+  appendStatusProgressNote,
   buildGoalCheckMessage,
   buildStatusBody,
   goalAlreadyExists,
@@ -101,6 +103,16 @@ export async function handleMessage(input) {
     }
   }
 
+  if (intent === "progress_note") {
+    const body = parseProgressNoteCommand(raw);
+    if (!body) {
+      return buildReply("note_invalid");
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    await appendStatusProgressNote(userId, `${date}: ${body}`);
+    return buildReply("progress_saved");
+  }
+
   if (intent === "delete_goal" || intent === "update_goal") {
     return buildReply("command_wip");
   }
@@ -132,6 +144,12 @@ export async function handleMessage(input) {
       typeLabel,
       content: parsed.content
     });
+  }
+
+  const structured = parseStructuredProgress(raw);
+  if (structured) {
+    await appendStatusProgressNote(userId, structured.line);
+    return buildReply("progress_auto_saved", { label: structured.label });
   }
 
   return buildReply("unknown");
