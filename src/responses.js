@@ -40,7 +40,7 @@ export function buildReply(kind, data = {}) {
     case "progress_saved":
       return "Hab ich als Fortschrittsnotiz gespeichert.";
     case "progress_auto_saved":
-      return `Als Fortschritt notiert (*${data.label}*).`;
+      return `Als Fortschritt notiert (*${data.label}*).${data.trelloHint ?? ""}`;
     case "reminder_no_goals":
       return "Keine Ziele für einen Reminder – erst Goals anlegen.";
     case "unknown":

@@ -1,6 +1,7 @@
 import { detectIntent, parseGoal, parseShopAdd, parseTaskAdd } from "./parser.js";
 import { parseProgressNoteCommand, parseStructuredProgress } from "./progressParser.js";
 import { buildReply } from "./responses.js";
+import { applyStructuredProgressToTrello } from "./trelloProgressService.js";
 import { createShoppingCards, createTaskCard, isTrelloConfigured } from "./trelloService.js";
 import {
   appendStatusProgressNote,
@@ -149,7 +150,19 @@ export async function handleMessage(input) {
   const structured = parseStructuredProgress(raw);
   if (structured) {
     await appendStatusProgressNote(userId, structured.line);
-    return buildReply("progress_auto_saved", { label: structured.label });
+    let trelloHint = "";
+    try {
+      const tr = await applyStructuredProgressToTrello(structured.kind, raw, userId);
+      if (tr.moved) {
+        trelloHint = ` Trello: Karte *${tr.moved}* nach Erledigt verschoben.`;
+      } else if (tr.noted) {
+        trelloHint = ` Trello: Blocker bei *${tr.noted}* in der Beschreibung ergänzt.`;
+      }
+    } catch (err) {
+      console.error("Trello progress follow-up:", err);
+      trelloHint = " (Trello-Anpassung ist fehlgeschlagen – nur Memory.)";
+    }
+    return buildReply("progress_auto_saved", { label: structured.label, trelloHint });
   }
 
   return buildReply("unknown");
