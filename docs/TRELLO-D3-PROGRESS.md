@@ -23,9 +23,13 @@ Gilt nur für Nachrichten, die **`parseStructuredProgress`** erkennt (`done`, `b
 
 Ohne `TRELLO_LIST_DONE` bleibt bei „erledigt“ nur der Memory-Eintrag (kein Fehler-Popup für den Nutzer).
 
+## Card-Map (E1)
+
+Nach **`TASK ADD`** speichert der Server **Card-ID + Titel** pro Nutzer (`data/trello-card-map.json`). Bei Fortschritt wird **zuerst** die Map genutzt, danach erst Fuzzy-Matching auf der Liste.
+
 ## Matching (sicherer Fallback)
 
-- Es werden nur Cards auf **`TRELLO_LIST_TASKS`** betrachtet.
+- Ohne Map-Treffer: nur Cards auf **`TRELLO_LIST_TASKS`** per Score.
 - Score aus: Wort-Überlappung **Card-Titel ↔ Nutzertext** und **Card-Titel ↔ Ziele** (Short/Mid/Long im Memory).
 - Zusätzlicher Bonus, wenn der **volle Card-Titel** im Nutzertext vorkommt.
 - Kein Treffer über dem Mindest-Score → **keine** Trello-Aktion (nur Memory).

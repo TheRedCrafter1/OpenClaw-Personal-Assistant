@@ -1,7 +1,6 @@
 import express from "express";
 import { handleMessage } from "./handleMessage.js";
 import { ensureMemoryFile, readMemoryContent } from "./memory.js";
-import { buildReminderMessage } from "./reminderService.js";
 import {
   postReminderOutbound,
   reminderAuthMiddleware,
@@ -60,11 +59,11 @@ app.get("/memory", async (req, res) => {
 app.post("/reminder/preview", reminderAuthMiddleware, async (req, res) => {
   const userId = req.body?.userId ?? "global";
   try {
-    const text = await buildReminderMessage(userId);
-    if (!text) {
-      return res.json({ reply: "", skipped: "no_goals" });
+    const r = await runReminderForUser(userId, { record: false });
+    if (!r.text) {
+      return res.json({ reply: "", skipped: r.skipped ?? "no_goals" });
     }
-    return res.json({ reply: text });
+    return res.json({ reply: r.text });
   } catch (err) {
     console.error("POST /reminder/preview:", err);
     return res.status(500).json({ error: "reminder_preview_failed" });
@@ -75,7 +74,7 @@ app.post("/reminder/dispatch", reminderAuthMiddleware, async (req, res) => {
   const userId = req.body?.userId ?? "global";
   const send = req.body?.send === true;
   try {
-    const r = await runReminderForUser(userId);
+    const r = await runReminderForUser(userId, { record: true });
     if (!r.text) {
       return res.json({ reply: "", skipped: r.skipped, outbound: null });
     }
@@ -90,7 +89,7 @@ app.post("/reminder/dispatch", reminderAuthMiddleware, async (req, res) => {
 app.post("/reminder/broadcast", reminderAuthMiddleware, async (req, res) => {
   const send = req.body?.send === true;
   try {
-    const list = await runRemindersForAllUsers();
+    const list = await runRemindersForAllUsers({ record: true });
     const results = [];
     for (const { userId: uid, text } of list) {
       const outbound = send ? await postReminderOutbound(uid, text) : null;

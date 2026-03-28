@@ -12,6 +12,10 @@ Konservativer Ablauf: erst testen, dann produktiv. Server-Endpunkte sind bereits
 
 Basis-URL ersetzen: `https://DEIN_HOST:3000` (oder nur intern `http://127.0.0.1:3000`, wenn n8n auf demselben VPS läuft).
 
+### Hardening (E1)
+
+`/reminder/dispatch` und `/reminder/broadcast` können zusätzlich `skipped` liefern: `outside_window`, `cooldown`, `duplicate_text` (siehe [E-HARDENING-DEBUG.md](./E-HARDENING-DEBUG.md)). Dann **keinen** WhatsApp-Versand auslösen, wenn `reply` leer ist.
+
 ## Gemeinsame HTTP-Optionen (n8n „HTTP Request“)
 
 - **Method:** POST  

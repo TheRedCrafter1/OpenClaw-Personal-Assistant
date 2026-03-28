@@ -3,6 +3,7 @@ import { parseProgressNoteCommand, parseStructuredProgress } from "./progressPar
 import { buildReply } from "./responses.js";
 import { applyStructuredProgressToTrello } from "./trelloProgressService.js";
 import { createShoppingCards, createTaskCard, isTrelloConfigured } from "./trelloService.js";
+import { registerTaskCard } from "./trelloUserMap.js";
 import {
   appendStatusProgressNote,
   buildGoalCheckMessage,
@@ -80,10 +81,16 @@ export async function handleMessage(input) {
           dueHint = "";
         }
       }
+      try {
+        await registerTaskCard(userId, card.id, card.name || task.title);
+      } catch {
+        /* Map ist optional; Task bleibt gültig */
+      }
       return buildReply("task_created", { name: card.name || task.title, dueHint });
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      return buildReply("trello_error", { detail: detail.slice(0, 120) });
+      const safe = detail.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+      return buildReply("trello_error", { detail: safe });
     }
   }
 
@@ -100,7 +107,8 @@ export async function handleMessage(input) {
       });
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      return buildReply("trello_error", { detail: detail.slice(0, 120) });
+      const safe = detail.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+      return buildReply("trello_error", { detail: safe });
     }
   }
 

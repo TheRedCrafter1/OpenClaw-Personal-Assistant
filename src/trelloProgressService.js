@@ -1,3 +1,4 @@
+import { logAssistant } from "./assistantLog.js";
 import { getSectionGoalsFromDoc, loadMemoryDoc } from "./memory.js";
 import {
   getCard,
@@ -6,6 +7,7 @@ import {
   updateCardDescription
 } from "./trelloClient.js";
 import { isTrelloConfigured } from "./trelloService.js";
+import { findMappedCardForProgress } from "./trelloUserMap.js";
 
 function listTasksId() {
   return process.env.TRELLO_LIST_TASKS?.trim() ?? "";
@@ -99,15 +101,26 @@ export async function applyStructuredProgressToTrello(kind, userText, userId) {
   }
 
   const goals = await goalTitlesForUser(userId);
-  let cards;
-  try {
-    cards = await listCardsOnList(listId);
-  } catch {
-    return { skipped: "list_failed" };
+
+  let match = await findMappedCardForProgress(userId, userText);
+  if (match) {
+    logAssistant("trello_progress_match", { userId, source: "card_map", cardId: match.id });
+  } else {
+    let cards;
+    try {
+      cards = await listCardsOnList(listId);
+    } catch (err) {
+      logAssistant("trello_progress_list_fail", { userId, err: String(err).slice(0, 80) });
+      return { skipped: "list_failed" };
+    }
+    match = pickBestMatchingCard(cards, userText, goals);
+    if (match) {
+      logAssistant("trello_progress_match", { userId, source: "fuzzy", cardId: match.id });
+    }
   }
 
-  const match = pickBestMatchingCard(cards, userText, goals);
   if (!match) {
+    logAssistant("trello_progress_match_miss", { userId });
     return { skipped: "no_card_match" };
   }
 
@@ -118,8 +131,14 @@ export async function applyStructuredProgressToTrello(kind, userText, userId) {
     }
     try {
       await moveCardToList(match.id, doneId);
+      logAssistant("trello_progress_ok", { userId, action: "moved_done", cardId: match.id });
       return { moved: match.name };
-    } catch {
+    } catch (err) {
+      logAssistant("trello_progress_fail", {
+        userId,
+        action: "move",
+        err: String(err).slice(0, 100)
+      });
       return { skipped: "move_failed" };
     }
   }
@@ -131,8 +150,14 @@ export async function applyStructuredProgressToTrello(kind, userText, userId) {
       const snippet = String(userText).replace(/\s+/g, " ").trim().slice(0, 280);
       const suffix = `\n\n---\n[${stamp}] Blocker (WhatsApp): ${snippet}`;
       await updateCardDescription(match.id, `${full.desc || ""}${suffix}`);
+      logAssistant("trello_progress_ok", { userId, action: "blocked_note", cardId: match.id });
       return { noted: match.name };
-    } catch {
+    } catch (err) {
+      logAssistant("trello_progress_fail", {
+        userId,
+        action: "desc",
+        err: String(err).slice(0, 100)
+      });
       return { skipped: "update_failed" };
     }
   }

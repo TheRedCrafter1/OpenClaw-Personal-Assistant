@@ -4,3 +4,7 @@ node_modules
 
 # Per-user assistant memory (created at runtime)
 data/users/*.md
+
+# Hardening / runtime state (E1)
+data/reminder-state.json
+data/trello-card-map.json
