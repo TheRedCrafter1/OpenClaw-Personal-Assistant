@@ -20,7 +20,6 @@ export function buildReply(kind, data = {}) {
       return `Hier ist dein aktueller Stand:\n\n${data.body}`;
     case "goal_check_empty":
       return "Für einen Goal-Check brauche ich erst Ziele – schreib z. B. „GOAL SET: …“ oder „kurzfristig …“.";
-<<<<<<< HEAD
     case "trello_not_configured":
       return (
         "Trello ist auf dem Server noch nicht konfiguriert. " +
@@ -33,19 +32,13 @@ export function buildReply(kind, data = {}) {
     case "shop_invalid":
       return "SHOP ADD braucht Einträge, z. B. *SHOP ADD: Milch, Eier, Brot*.";
     case "task_created":
-      return `Task in Trello: *${data.name}*${data.dueHint}`;
+      return `Task in Trello: *${data.name}*${data.dueHint ?? ""}`;
     case "shop_added":
       return `Zur Einkaufsliste (${data.count}): *${data.items}*.`;
     case "unknown":
       return (
         "Das habe ich noch nicht ganz verstanden. " +
         "Befehle: *GOAL SET:*, *STATUS:*, *GOAL CHECK:*, *TASK ADD:*, *SHOP ADD:*, plus Zeitfenster-Ziele."
-=======
-    case "unknown":
-      return (
-        "Das habe ich noch nicht ganz verstanden. " +
-        "Offizielle Befehle: *GOAL SET:*, *STATUS:*, *GOAL CHECK:*, plus „langfristig/mittelfristig/kurzfristig …“."
->>>>>>> 6e2f87cb2fbafe495e6eed6bb2e9a855974bea3f
       );
     case "command_wip":
       return (

@@ -55,7 +55,6 @@ export async function handleMessage(input) {
     return msg.trim() ? msg : buildReply("goal_check_empty");
   }
 
-<<<<<<< HEAD
   if (intent === "task_add" || intent === "shop_add") {
     if (!isTrelloConfigured()) {
       return buildReply("trello_not_configured");
@@ -102,8 +101,6 @@ export async function handleMessage(input) {
     }
   }
 
-=======
->>>>>>> 6e2f87cb2fbafe495e6eed6bb2e9a855974bea3f
   if (intent === "delete_goal" || intent === "update_goal") {
     return buildReply("command_wip");
   }

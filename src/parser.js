@@ -22,11 +22,7 @@ const WEAK_GOAL_WORDS = new Set([
 
 /**
  * @param {string} text
-<<<<<<< HEAD
  * @returns {"status"|"goal_check"|"task_add"|"shop_add"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
-=======
- * @returns {"status"|"goal_check"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
->>>>>>> 6e2f87cb2fbafe495e6eed6bb2e9a855974bea3f
  */
 export function detectIntent(text) {
   const t = normalizeText(text);
@@ -34,11 +30,8 @@ export function detectIntent(text) {
 
   if (cmd === "status") return "status";
   if (cmd.startsWith("goal check")) return "goal_check";
-<<<<<<< HEAD
   if (t.startsWith("task add:")) return "task_add";
   if (t.startsWith("shop add:")) return "shop_add";
-=======
->>>>>>> 6e2f87cb2fbafe495e6eed6bb2e9a855974bea3f
   if (t.startsWith("delete ")) return "delete_goal";
   if (t.startsWith("update ")) return "update_goal";
 
