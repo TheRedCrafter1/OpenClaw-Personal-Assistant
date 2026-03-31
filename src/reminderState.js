@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { atomicWriteFile, withKeyedLock } from "./fileStore.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_PATH = path.join(DATA_DIR, "reminder-state.json");
@@ -32,10 +33,7 @@ async function loadRaw() {
 }
 
 async function saveRaw(/** @type Record<string, ReminderEntry> */ data) {
-  await mkdir(DATA_DIR, { recursive: true });
-  const tmp = `${STATE_PATH}.tmp`;
-  await writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
-  await rename(tmp, STATE_PATH);
+  await atomicWriteFile(STATE_PATH, JSON.stringify(data, null, 2));
 }
 
 function hashText(text) {
@@ -82,12 +80,15 @@ export async function shouldSkipReminderDedupe(userId, nextText) {
 export async function recordReminderSent(userId, text) {
   if (!dedupeEnabled()) return;
   const uid = String(userId ?? "global").trim() || "global";
-  const data = await loadRaw();
-  data[uid] = {
-    lastSentAt: new Date().toISOString(),
-    lastTextHash: hashText(text)
-  };
-  await saveRaw(data);
+  await withKeyedLock(`reminder-state:${uid}`, async () => {
+    const data = await loadRaw();
+    data[uid] = {
+      ...(data[uid] || {}),
+      lastSentAt: new Date().toISOString(),
+      lastTextHash: hashText(text)
+    };
+    await saveRaw(data);
+  });
 }
 
 /**
@@ -96,19 +97,21 @@ export async function recordReminderSent(userId, text) {
  */
 export async function getReminderPauseStatus(userId) {
   const uid = String(userId ?? "global").trim() || "global";
-  const data = await loadRaw();
-  const until = data[uid]?.pauseUntil;
-  if (!until) return { paused: false };
-  const ms = new Date(until).getTime();
-  if (!Number.isFinite(ms) || ms <= Date.now()) {
-    // stale pause -> clear
-    if (data[uid]) {
-      delete data[uid].pauseUntil;
-      await saveRaw(data);
+  return withKeyedLock(`reminder-state:${uid}`, async () => {
+    const data = await loadRaw();
+    const until = data[uid]?.pauseUntil;
+    if (!until) return { paused: false };
+    const ms = new Date(until).getTime();
+    if (!Number.isFinite(ms) || ms <= Date.now()) {
+      // stale pause -> clear
+      if (data[uid]) {
+        delete data[uid].pauseUntil;
+        await saveRaw(data);
+      }
+      return { paused: false };
     }
-    return { paused: false };
-  }
-  return { paused: true, until };
+    return { paused: true, until };
+  });
 }
 
 /**
@@ -120,12 +123,14 @@ export async function setReminderPause(userId, hours) {
   const uid = String(userId ?? "global").trim() || "global";
   const h = Number.isFinite(hours) && hours > 0 ? hours : 72;
   const until = new Date(Date.now() + h * 3600 * 1000).toISOString();
-  const data = await loadRaw();
-  data[uid] = {
-    ...(data[uid] || {}),
-    pauseUntil: until
-  };
-  await saveRaw(data);
+  await withKeyedLock(`reminder-state:${uid}`, async () => {
+    const data = await loadRaw();
+    data[uid] = {
+      ...(data[uid] || {}),
+      pauseUntil: until
+    };
+    await saveRaw(data);
+  });
   return until;
 }
 
@@ -135,9 +140,11 @@ export async function setReminderPause(userId, hours) {
  */
 export async function clearReminderPause(userId) {
   const uid = String(userId ?? "global").trim() || "global";
-  const data = await loadRaw();
-  if (!data[uid]?.pauseUntil) return false;
-  delete data[uid].pauseUntil;
-  await saveRaw(data);
-  return true;
+  return withKeyedLock(`reminder-state:${uid}`, async () => {
+    const data = await loadRaw();
+    if (!data[uid]?.pauseUntil) return false;
+    delete data[uid].pauseUntil;
+    await saveRaw(data);
+    return true;
+  });
 }

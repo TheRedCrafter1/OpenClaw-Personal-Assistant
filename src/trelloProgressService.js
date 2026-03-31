@@ -38,15 +38,21 @@ export function scoreCardMatch(cardName, userText, goals) {
   const ut = new Set(tokenize(userText));
   const goalTokens = tokenize(goals.join(" "));
   let score = 0;
+  let userTokenHits = 0;
   for (const t of ct) {
     if (t.length < 3) continue;
-    if (ut.has(t)) score += 2;
+    if (ut.has(t)) {
+      score += 2;
+      userTokenHits += 1;
+    }
     if (goalTokens.includes(t)) score += 1;
   }
+  let exactTitleHit = false;
   if (cardName.length > 0 && userText.toLowerCase().includes(cardName.toLowerCase())) {
     score += 4;
+    exactTitleHit = true;
   }
-  return score;
+  return { score, userTokenHits, exactTitleHit };
 }
 
 /**
@@ -58,14 +64,20 @@ export function pickBestMatchingCard(cards, userText, goals) {
   const minS = minMatchScore();
   let best = null;
   let bestScore = 0;
+  let bestEvidence = null;
   for (const c of cards) {
-    const s = scoreCardMatch(c.name, userText, goals);
-    if (s > bestScore) {
-      bestScore = s;
+    const evidence = scoreCardMatch(c.name, userText, goals);
+    if (evidence.score > bestScore) {
+      bestScore = evidence.score;
       best = c;
+      bestEvidence = evidence;
     }
   }
-  if (!best || bestScore < minS) {
+  if (!best || !bestEvidence || bestScore < minS) {
+    return null;
+  }
+  // Auto-actions need direct user-text evidence, not just overlap with stored goals.
+  if (!bestEvidence.exactTitleHit && bestEvidence.userTokenHits === 0) {
     return null;
   }
   return best;

@@ -15,6 +15,35 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+function readBearerSecret(req) {
+  return req.headers.authorization?.replace(/^Bearer\s+/i, "")?.trim() || "";
+}
+
+function requireBodyUserId(req, res, next) {
+  const userId = typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
+  if (!userId) {
+    return res.status(400).json({ error: "userId_required" });
+  }
+  return next();
+}
+
+function adminAuthMiddleware(req, res, next) {
+  if (process.env.MEMORY_READ_ENABLED?.trim() === "1") {
+    return next();
+  }
+
+  const secret = process.env.ASSISTANT_ADMIN_SECRET?.trim();
+  if (!secret) {
+    return res.status(403).json({ error: "memory_read_disabled" });
+  }
+
+  const header = readBearerSecret(req) || String(req.headers["x-admin-secret"] ?? "").trim();
+  if (header !== secret) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  return next();
+}
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -23,7 +52,7 @@ app.get("/", (_req, res) => {
   res.send("Personal Assistant server läuft.");
 });
 
-app.post("/message", messageRateLimit(), async (req, res) => {
+app.post("/message", messageRateLimit(), requireBodyUserId, async (req, res) => {
   const text = req.body?.text ?? "";
   const userId = req.body?.userId ?? "global";
   try {
@@ -35,7 +64,7 @@ app.post("/message", messageRateLimit(), async (req, res) => {
   }
 });
 
-app.post("/webhook", messageRateLimit(), async (req, res) => {
+app.post("/webhook", messageRateLimit(), requireBodyUserId, async (req, res) => {
   const text = req.body?.text ?? "";
   const userId = req.body?.userId ?? "global";
   try {
@@ -47,8 +76,11 @@ app.post("/webhook", messageRateLimit(), async (req, res) => {
   }
 });
 
-app.get("/memory", async (req, res) => {
-  const userId = typeof req.query.userId === "string" ? req.query.userId : "global";
+app.get("/memory", adminAuthMiddleware, async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId.trim() : "";
+  if (!userId) {
+    return res.status(400).json({ error: "userId_required" });
+  }
   try {
     await ensureMemoryFile(userId);
     const memoryContent = await readMemoryContent(userId);
@@ -58,43 +90,55 @@ app.get("/memory", async (req, res) => {
   }
 });
 
-app.post("/reminder/preview", reminderRateLimit(), reminderAuthMiddleware, async (req, res) => {
-  const userId = req.body?.userId ?? "global";
-  try {
-    const r = await runReminderForUser(userId, { enforceGuards: false });
-    if (!r.text) {
-      return res.json({ reply: "", skipped: r.skipped ?? "no_goals" });
-    }
-    return res.json({ reply: r.text });
-  } catch (err) {
-    console.error("POST /reminder/preview:", err);
-    return res.status(500).json({ error: "reminder_preview_failed" });
-  }
-});
-
-app.post("/reminder/dispatch", reminderRateLimit(), reminderAuthMiddleware, async (req, res) => {
-  const userId = req.body?.userId ?? "global";
-  const send = req.body?.send === true;
-  try {
-    const r = await runReminderForUser(userId, { enforceGuards: true });
-    if (!r.text) {
-      return res.json({ reply: "", skipped: r.skipped, outbound: null });
-    }
-    let outbound = null;
-    if (send) {
-      outbound = await postReminderOutbound(userId, r.text);
-      if (outbound.ok) {
-        await recordReminderSent(userId, r.text);
-      } else {
-        return res.json({ reply: "", skipped: "outbound_failed", outbound });
+app.post(
+  "/reminder/preview",
+  reminderRateLimit(),
+  reminderAuthMiddleware,
+  requireBodyUserId,
+  async (req, res) => {
+    const userId = req.body.userId.trim();
+    try {
+      const r = await runReminderForUser(userId, { enforceGuards: false });
+      if (!r.text) {
+        return res.json({ reply: "", skipped: r.skipped ?? "no_goals" });
       }
+      return res.json({ reply: r.text });
+    } catch (err) {
+      console.error("POST /reminder/preview:", err);
+      return res.status(500).json({ error: "reminder_preview_failed" });
     }
-    return res.json({ reply: r.text, outbound });
-  } catch (err) {
-    console.error("POST /reminder/dispatch:", err);
-    return res.status(500).json({ error: "reminder_dispatch_failed" });
   }
-});
+);
+
+app.post(
+  "/reminder/dispatch",
+  reminderRateLimit(),
+  reminderAuthMiddleware,
+  requireBodyUserId,
+  async (req, res) => {
+    const userId = req.body.userId.trim();
+    const send = req.body?.send === true;
+    try {
+      const r = await runReminderForUser(userId, { enforceGuards: true });
+      if (!r.text) {
+        return res.json({ reply: "", skipped: r.skipped, outbound: null });
+      }
+      let outbound = null;
+      if (send) {
+        outbound = await postReminderOutbound(userId, r.text);
+        if (outbound.ok) {
+          await recordReminderSent(userId, r.text);
+        } else {
+          return res.json({ reply: "", skipped: "outbound_failed", outbound });
+        }
+      }
+      return res.json({ reply: r.text, outbound });
+    } catch (err) {
+      console.error("POST /reminder/dispatch:", err);
+      return res.status(500).json({ error: "reminder_dispatch_failed" });
+    }
+  }
+);
 
 app.post("/reminder/broadcast", reminderRateLimit(), reminderAuthMiddleware, async (req, res) => {
   const send = req.body?.send === true;
@@ -121,20 +165,26 @@ app.post("/reminder/broadcast", reminderRateLimit(), reminderAuthMiddleware, asy
   }
 });
 
-app.post("/reminder/mark-sent", reminderRateLimit(), reminderAuthMiddleware, async (req, res) => {
-  const userId = req.body?.userId ?? "global";
-  const text = String(req.body?.text ?? "").trim();
-  if (!text) {
-    return res.status(400).json({ error: "text_required" });
+app.post(
+  "/reminder/mark-sent",
+  reminderRateLimit(),
+  reminderAuthMiddleware,
+  requireBodyUserId,
+  async (req, res) => {
+    const userId = req.body.userId.trim();
+    const text = String(req.body?.text ?? "").trim();
+    if (!text) {
+      return res.status(400).json({ error: "text_required" });
+    }
+    try {
+      await recordReminderSent(userId, text);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("POST /reminder/mark-sent:", err);
+      return res.status(500).json({ error: "mark_sent_failed" });
+    }
   }
-  try {
-    await recordReminderSent(userId, text);
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error("POST /reminder/mark-sent:", err);
-    return res.status(500).json({ error: "mark_sent_failed" });
-  }
-});
+);
 
 app.listen(PORT, () => {
   console.log(`Server läuft auf Port ${PORT}`);

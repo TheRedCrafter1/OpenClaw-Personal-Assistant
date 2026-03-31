@@ -4,11 +4,13 @@
 
 - Twilio WhatsApp -> n8n Webhook -> Assistant `POST /message`
 - Assistant schreibt Memory pro User (`data/users/*.md`)
+- `userId` ist für `/message`, `/webhook`, `/reminder/preview`, `/reminder/dispatch` und `/reminder/mark-sent` Pflicht
 - Reminder:
   - `POST /reminder/preview` (nur Text)
   - `POST /reminder/dispatch` (ein User)
   - `POST /reminder/broadcast` (alle User)
   - Optional `POST /reminder/mark-sent` (wenn n8n selbst an Twilio sendet)
+- `GET /memory` ist standardmäßig deaktiviert und braucht entweder `ASSISTANT_ADMIN_SECRET` oder explizit `MEMORY_READ_ENABLED=1`
 
 ## Wichtigste Commands (User)
 
@@ -29,6 +31,8 @@
   - `PORT`
   - `REMINDER_RUN_SECRET`
   - `ASSISTANT_LOG=1` (empfohlen produktiv)
+  - `ASSISTANT_ADMIN_SECRET` (empfohlen, wenn `/memory` genutzt wird)
+  - `MEMORY_READ_ENABLED=1` nur für bewusst erlaubten Debug-Zugriff
 - Trello:
   - `TRELLO_KEY`, `TRELLO_TOKEN`
   - `TRELLO_LIST_TASKS`, `TRELLO_LIST_SHOPPING`, `TRELLO_LIST_DONE`
@@ -46,6 +50,7 @@
 - Erst `preview` testen.
 - Bei `broadcast` nur senden, wenn `reply` nicht leer und kein problematisches `skipped`.
 - Wenn `send: false` verwendet wird: nach erfolgreichem Twilio-Versand `mark-sent` aufrufen.
+- n8n muss `userId` immer explizit durchreichen, sonst lehnt der Server den Request ab.
 
 ## Logs
 

@@ -1,4 +1,5 @@
-import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { appendFile, mkdir, readdir, readFile, rename } from "node:fs/promises";
 import path from "node:path";
 import {
   MEMORY_SECTION_ORDER,
@@ -6,6 +7,7 @@ import {
   renderMemoryDocument,
   ensureAllSections
 } from "./memoryDocument.js";
+import { atomicWriteFile, withKeyedLock } from "./fileStore.js";
 import { triggerMemorySync } from "./syncTrigger.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -18,9 +20,27 @@ const GOAL_SECTIONS = ["Long-term", "Mid-term", "Short-term"];
 /** @param {string} [userId] */
 export function sanitizeUserId(userId = "global") {
   const raw = String(userId ?? "global").trim() || "global";
-  let safe = raw.replace(/^whatsapp:/i, "whatsapp_").replace(/[^\w-]/g, "_");
-  if (!safe) return "global";
-  return safe;
+  if (raw === "global") return "global";
+  const safe = raw.replace(/^whatsapp:/i, "whatsapp_").replace(/[^\w-]/g, "_").slice(0, 48) || "user";
+  const hash = createHash("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
+  return `${safe}__${hash}`;
+}
+
+/** @param {string} [userId] */
+function legacySanitizeUserId(userId = "global") {
+  const raw = String(userId ?? "global").trim() || "global";
+  const safe = raw.replace(/^whatsapp:/i, "whatsapp_").replace(/[^\w-]/g, "_");
+  return safe || "global";
+}
+
+/** @param {string} [userId] */
+function getLegacyMemoryPath(userId = "global") {
+  return path.join(USERS_DIR, `${legacySanitizeUserId(userId)}.md`);
+}
+
+/** @param {string} [userId] */
+function memoryLockKey(userId = "global") {
+  return `memory:${sanitizeUserId(userId)}`;
 }
 
 /** @param {string} userLabel */
@@ -50,20 +70,38 @@ export async function ensureMemoryFile(userId = "global") {
     await readFile(filePath, "utf8");
     return filePath;
   } catch {
-    const displayId = String(userId ?? "global").trim() || "global";
-
-    if (sanitizeUserId(userId) === "global") {
+    return withKeyedLock(memoryLockKey(userId), async () => {
       try {
-        const legacy = await readFile(LEGACY_MEMORY_PATH, "utf8");
-        await writeFile(filePath, legacy, "utf8");
+        await readFile(filePath, "utf8");
         return filePath;
       } catch {
-        /* no legacy file */
-      }
-    }
+        const displayId = String(userId ?? "global").trim() || "global";
+        const legacyUserPath = getLegacyMemoryPath(userId);
 
-    await writeFile(filePath, memoryTemplate(displayId), "utf8");
-    return filePath;
+        if (legacyUserPath !== filePath) {
+          try {
+            await readFile(legacyUserPath, "utf8");
+            await rename(legacyUserPath, filePath);
+            return filePath;
+          } catch {
+            /* no legacy user file */
+          }
+        }
+
+        if (legacySanitizeUserId(userId) === "global") {
+          try {
+            const legacy = await readFile(LEGACY_MEMORY_PATH, "utf8");
+            await atomicWriteFile(filePath, legacy);
+            return filePath;
+          } catch {
+            /* no legacy file */
+          }
+        }
+
+        await atomicWriteFile(filePath, memoryTemplate(displayId));
+        return filePath;
+      }
+    });
   }
 }
 
@@ -100,7 +138,7 @@ export async function writeMemoryDoc(doc, userId) {
   const fallbackUser = String(userId ?? "global").trim() || "global";
   const out = renderMemoryDocument(doc, `User: ${fallbackUser}`);
   const filePath = getMemoryPath(userId);
-  await writeFile(filePath, out, "utf8");
+  await atomicWriteFile(filePath, out);
   await triggerMemorySync();
 }
 
@@ -157,15 +195,17 @@ export async function goalAlreadyExists(userId, section, goalText) {
 }
 
 export async function saveGoal(userId, section, goalText) {
-  const doc = await loadMemoryDoc(userId);
-  const list = getSectionGoalsFromDoc(doc, section);
-  const normalized = goalText.trim().toLowerCase();
-  if (list.some((g) => g.trim().toLowerCase() === normalized)) {
-    return false;
-  }
-  doc.sections[section] = [...list, goalText.trim()];
-  await writeMemoryDoc(doc, userId);
-  return true;
+  return withKeyedLock(memoryLockKey(userId), async () => {
+    const doc = await loadMemoryDoc(userId);
+    const list = getSectionGoalsFromDoc(doc, section);
+    const normalized = goalText.trim().toLowerCase();
+    if (list.some((g) => g.trim().toLowerCase() === normalized)) {
+      return false;
+    }
+    doc.sections[section] = [...list, goalText.trim()];
+    await writeMemoryDoc(doc, userId);
+    return true;
+  });
 }
 
 const STATUS_SECTION = "Status / Progress Notes";
@@ -180,27 +220,29 @@ export async function appendStatusProgressNote(userId, line) {
   if (!note) {
     return false;
   }
-  const doc = await loadMemoryDoc(userId);
-  const prev = getSectionGoalsFromDoc(doc, STATUS_SECTION);
-  const maxNotes = parseInt(process.env.MEMORY_PROGRESS_NOTES_MAX ?? "120", 10);
-  const limit = Number.isFinite(maxNotes) && maxNotes > 10 ? maxNotes : 120;
-  const next = [...prev, note];
+  return withKeyedLock(memoryLockKey(userId), async () => {
+    const doc = await loadMemoryDoc(userId);
+    const prev = getSectionGoalsFromDoc(doc, STATUS_SECTION);
+    const maxNotes = parseInt(process.env.MEMORY_PROGRESS_NOTES_MAX ?? "120", 10);
+    const limit = Number.isFinite(maxNotes) && maxNotes > 10 ? maxNotes : 120;
+    const next = [...prev, note];
 
-  if (next.length > limit) {
-    const overflow = next.slice(0, next.length - limit);
-    doc.sections[STATUS_SECTION] = next.slice(-limit);
-    try {
-      await mkdir(PROGRESS_ARCHIVE_DIR, { recursive: true });
-      const f = path.join(PROGRESS_ARCHIVE_DIR, `${sanitizeUserId(userId)}.log`);
-      await appendFile(f, `${overflow.join("\n")}\n`, "utf8");
-    } catch {
-      // archive errors must not block note writes
+    if (next.length > limit) {
+      const overflow = next.slice(0, next.length - limit);
+      doc.sections[STATUS_SECTION] = next.slice(-limit);
+      try {
+        await mkdir(PROGRESS_ARCHIVE_DIR, { recursive: true });
+        const f = path.join(PROGRESS_ARCHIVE_DIR, `${sanitizeUserId(userId)}.log`);
+        await appendFile(f, `${overflow.join("\n")}\n`, "utf8");
+      } catch {
+        // archive errors must not block note writes
+      }
+    } else {
+      doc.sections[STATUS_SECTION] = next;
     }
-  } else {
-    doc.sections[STATUS_SECTION] = next;
-  }
-  await writeMemoryDoc(doc, userId);
-  return true;
+    await writeMemoryDoc(doc, userId);
+    return true;
+  });
 }
 
 /**
@@ -266,7 +308,7 @@ export async function buildGoalCheckMessage(userId) {
       s === "Long-term" ? "Langfristig" : s === "Mid-term" ? "Mittelfristig" : "Kurzfristig";
     lines.push(`*${label}:* ${items.slice(0, 3).join(" · ")}`);
   }
-  const notes = getSectionGoalsFromDoc(doc, "Status / Progress Notes").slice(0, 2);
+  const notes = getSectionGoalsFromDoc(doc, "Status / Progress Notes").slice(-2);
   if (notes.length) {
     lines.push(`*Notizen:* ${notes.join(" · ")}`);
   }

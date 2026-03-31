@@ -1,5 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { atomicWriteFile, withKeyedLock } from "./fileStore.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const MAP_PATH = path.join(DATA_DIR, "trello-card-map.json");
@@ -22,10 +23,7 @@ async function loadAll() {
 }
 
 async function saveAll(/** @type Record<string, MappedCard[]> */ data) {
-  await mkdir(DATA_DIR, { recursive: true });
-  const tmp = `${MAP_PATH}.tmp`;
-  await writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
-  await rename(tmp, MAP_PATH);
+  await atomicWriteFile(MAP_PATH, JSON.stringify(data, null, 2));
 }
 
 function norm(s) {
@@ -50,16 +48,18 @@ function tokens(s) {
 export async function registerTaskCard(userId, cardId, title) {
   if (process.env.TRELLO_MAP_DISABLED?.trim() === "1") return;
   const uid = String(userId ?? "global").trim() || "global";
-  const data = await loadAll();
-  const list = Array.isArray(data[uid]) ? data[uid] : [];
-  const entry = {
-    id: String(cardId),
-    title: String(title).trim(),
-    ts: new Date().toISOString()
-  };
-  const next = [entry, ...list.filter((c) => c.id !== entry.id)].slice(0, MAX_PER_USER);
-  data[uid] = next;
-  await saveAll(data);
+  await withKeyedLock(`trello-map:${uid}`, async () => {
+    const data = await loadAll();
+    const list = Array.isArray(data[uid]) ? data[uid] : [];
+    const entry = {
+      id: String(cardId),
+      title: String(title).trim(),
+      ts: new Date().toISOString()
+    };
+    const next = [entry, ...list.filter((c) => c.id !== entry.id)].slice(0, MAX_PER_USER);
+    data[uid] = next;
+    await saveAll(data);
+  });
 }
 
 /**

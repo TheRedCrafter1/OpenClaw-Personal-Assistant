@@ -5,6 +5,7 @@
 - Prüfen: n8n Execution erfolgreich?
 - Prüfen: HTTP Request Body enthält `text` und `userId` korrekt?
 - Prüfen: Assistant `/message` antwortet lokal mit curl/Postman?
+- Wenn `error: userId_required`: n8n/Twilio Mapping liefert keine stabile Absender-ID
 
 ## 2) Trello `401` / `invalid token`
 
@@ -36,5 +37,5 @@
 
 - Schreibrechte auf `data/users/` und `data/` prüfen.
 - Prozess-User in systemd prüfen.
-- `POST /memory?userId=...` testen.
+- `GET /memory?userId=...` nur mit `ASSISTANT_ADMIN_SECRET` oder bewusstem `MEMORY_READ_ENABLED=1` testen.
 

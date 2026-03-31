@@ -11,9 +11,11 @@
 ## Secrets / ENV
 
 - [ ] `REMINDER_RUN_SECRET` gesetzt
+- [ ] `ASSISTANT_ADMIN_SECRET` gesetzt, falls `/memory` gebraucht wird
 - [ ] Trello-ENV (`TRELLO_KEY`, `TRELLO_TOKEN`, Listen-IDs) gesetzt
 - [ ] Reminder-Hardening-ENV gesetzt (Fenster, Cooldown, recent progress)
 - [ ] Optional Outbound-ENV gesetzt (falls genutzt)
+- [ ] `MEMORY_READ_ENABLED` nur bewusst gesetzt; sonst `/memory` deaktiviert lassen
 
 ## Runtime-Daten
 
@@ -27,6 +29,7 @@
 - [ ] `ASSISTANT_LOG=1` aktiv
 - [ ] Log-Zugriff dokumentiert (`journalctl`/PM2/Docker)
 - [ ] Alarmierung für wiederholte `outbound_failed` vorhanden
+- [ ] Alarmierung/Monitoring für `userId_required` und `memory_read_disabled` Fehler vorhanden
 
 ## Backup
 
