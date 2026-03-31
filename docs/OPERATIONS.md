@@ -4,7 +4,8 @@
 
 - Twilio WhatsApp -> n8n Webhook -> Assistant `POST /message`
 - Assistant schreibt Memory pro User (`data/users/*.md`)
-- `userId` ist für `/message`, `/webhook`, `/reminder/preview`, `/reminder/dispatch` und `/reminder/mark-sent` Pflicht
+- `/message` und `/webhook` funktionieren auch mit nur `{ "text": "..." }` (Fallback auf User `global`)
+- Für echte Multi-User-Trennung sollte n8n trotzdem `userId` (oder Twilio `From`) an den Server durchreichen
 - Reminder:
   - `POST /reminder/preview` (nur Text)
   - `POST /reminder/dispatch` (ein User)
@@ -50,7 +51,7 @@
 - Erst `preview` testen.
 - Bei `broadcast` nur senden, wenn `reply` nicht leer und kein problematisches `skipped`.
 - Wenn `send: false` verwendet wird: nach erfolgreichem Twilio-Versand `mark-sent` aufrufen.
-- n8n muss `userId` immer explizit durchreichen, sonst lehnt der Server den Request ab.
+- n8n sollte `userId` explizit durchreichen (oder `From`), damit nicht alles im `global`-Memory landet.
 
 ## Logs
 

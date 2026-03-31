@@ -19,6 +19,40 @@ function readBearerSecret(req) {
   return req.headers.authorization?.replace(/^Bearer\s+/i, "")?.trim() || "";
 }
 
+function normalizeInboundUserId(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^whatsapp:/i.test(raw)) return raw;
+  // Twilio usually sends +E164 or waId-like values; keep it stable for per-user memory keys.
+  if (/^\+?\d{6,20}$/.test(raw)) return `whatsapp:${raw.startsWith("+") ? raw : `+${raw}`}`;
+  return raw;
+}
+
+function extractInboundMessagePayload(body) {
+  const b = body && typeof body === "object" ? body : {};
+  const textCandidates = [b.text, b.Body, b.message, b.msg];
+  const userCandidates = [b.userId, b.from, b.From, b.waId, b.WaId];
+
+  let text = "";
+  for (const c of textCandidates) {
+    if (typeof c === "string" && c.trim()) {
+      text = c;
+      break;
+    }
+  }
+
+  let userId = "";
+  for (const c of userCandidates) {
+    userId = normalizeInboundUserId(c);
+    if (userId) break;
+  }
+
+  return {
+    text,
+    userId: userId || "global"
+  };
+}
+
 function requireBodyUserId(req, res, next) {
   const userId = typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
   if (!userId) {
@@ -52,9 +86,8 @@ app.get("/", (_req, res) => {
   res.send("Personal Assistant server läuft.");
 });
 
-app.post("/message", messageRateLimit(), requireBodyUserId, async (req, res) => {
-  const text = req.body?.text ?? "";
-  const userId = req.body?.userId ?? "global";
+app.post("/message", messageRateLimit(), async (req, res) => {
+  const { text, userId } = extractInboundMessagePayload(req.body);
   try {
     const reply = await handleMessage({ text, userId });
     return res.json({ reply });
@@ -64,9 +97,8 @@ app.post("/message", messageRateLimit(), requireBodyUserId, async (req, res) => 
   }
 });
 
-app.post("/webhook", messageRateLimit(), requireBodyUserId, async (req, res) => {
-  const text = req.body?.text ?? "";
-  const userId = req.body?.userId ?? "global";
+app.post("/webhook", messageRateLimit(), async (req, res) => {
+  const { text, userId } = extractInboundMessagePayload(req.body);
   try {
     const reply = await handleMessage({ text, userId });
     return res.json({ reply });
