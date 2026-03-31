@@ -6,9 +6,9 @@
 export function buildReply(kind, data = {}) {
   switch (kind) {
     case "goal_saved":
-      return `Hab ich gespeichert: *${data.typeLabel} – ${data.content}*.`;
+      return `${data.goalLabel ?? "Ziel"} gespeichert: ${data.content}.`;
     case "goal_duplicate":
-      return `Das Ziel ist schon drin: *${data.typeLabel} – ${data.content}*.`;
+      return `${data.goalLabel ?? "Ziel"} ist schon gespeichert: ${data.content}.`;
     case "goal_invalid":
       return (
         "Ich konnte kein klares Ziel erkennen. Schreib z. B. " +

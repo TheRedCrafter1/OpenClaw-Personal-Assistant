@@ -1,6 +1,6 @@
 import {
   detectIntent,
-  parseGoal,
+  parseGoals,
   parsePauseReminder,
   parseShopAdd,
   parseTaskAdd,
@@ -34,6 +34,14 @@ const TYPE_LABEL = {
   "Mid-term": "mittelfristig",
   "Short-term": "kurzfristig",
   "Status / Progress Notes": "Status/Notiz",
+  "Reminder Rules": "Reminder-Regel"
+};
+
+const GOAL_LABEL = {
+  "Long-term": "Langfristiges Ziel",
+  "Mid-term": "Mittelfristiges Ziel",
+  "Short-term": "Kurzfristiges Ziel",
+  "Status / Progress Notes": "Ziel",
   "Reminder Rules": "Reminder-Regel"
 };
 
@@ -202,32 +210,64 @@ export async function handleMessage(input) {
   }
 
   if (intent === "add_goal") {
-    const parsed = parseGoal(raw);
-    if (!parsed) {
+    const parsedGoals = parseGoals(raw);
+    if (!parsedGoals.length) {
       return buildReply("goal_invalid");
     }
 
-    const typeLabel = TYPE_LABEL[parsed.type] ?? parsed.type;
-    const exists = await goalAlreadyExists(userId, parsed.type, parsed.content);
-    if (exists) {
-      return buildReply("goal_duplicate", {
+    if (parsedGoals.length === 1) {
+      const parsed = parsedGoals[0];
+      const typeLabel = TYPE_LABEL[parsed.type] ?? parsed.type;
+      const goalLabel = GOAL_LABEL[parsed.type] ?? "Ziel";
+      const exists = await goalAlreadyExists(userId, parsed.type, parsed.content);
+      if (exists) {
+        return buildReply("goal_duplicate", {
+          typeLabel,
+          goalLabel,
+          content: parsed.content
+        });
+      }
+
+      const saved = await saveGoal(userId, parsed.type, parsed.content);
+      if (!saved) {
+        return buildReply("goal_duplicate", {
+          typeLabel,
+          goalLabel,
+          content: parsed.content
+        });
+      }
+
+      return buildReply("goal_saved", {
         typeLabel,
+        goalLabel,
         content: parsed.content
       });
     }
 
-    const saved = await saveGoal(userId, parsed.type, parsed.content);
-    if (!saved) {
-      return buildReply("goal_duplicate", {
-        typeLabel,
-        content: parsed.content
-      });
+    const savedLines = [];
+    const duplicateLines = [];
+    for (const g of parsedGoals) {
+      const goalLabel = GOAL_LABEL[g.type] ?? "Ziel";
+      const exists = await goalAlreadyExists(userId, g.type, g.content);
+      if (exists) {
+        duplicateLines.push(`${goalLabel}: ${g.content}`);
+        continue;
+      }
+      const saved = await saveGoal(userId, g.type, g.content);
+      if (saved) {
+        savedLines.push(`${goalLabel}: ${g.content}`);
+      } else {
+        duplicateLines.push(`${goalLabel}: ${g.content}`);
+      }
     }
 
-    return buildReply("goal_saved", {
-      typeLabel,
-      content: parsed.content
-    });
+    if (savedLines.length && duplicateLines.length) {
+      return `Gespeichert:\n- ${savedLines.join("\n- ")}\n\nSchon vorhanden:\n- ${duplicateLines.join("\n- ")}`;
+    }
+    if (savedLines.length) {
+      return `Gespeichert:\n- ${savedLines.join("\n- ")}`;
+    }
+    return `Schon vorhanden:\n- ${duplicateLines.join("\n- ")}`;
   }
 
   const structured = parseStructuredProgress(raw);

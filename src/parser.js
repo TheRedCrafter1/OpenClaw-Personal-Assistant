@@ -20,6 +20,17 @@ const WEAK_GOAL_WORDS = new Set([
   "gerne"
 ]);
 
+function cleanupGoalContent(content) {
+  return String(content)
+    .replace(/^mein\s+ziel\s+ist\s*/i, "")
+    .replace(/^mein\s+ziel\s*/i, "")
+    .replace(/^ziel\s+ist\s*/i, "")
+    .replace(/^ziel\s*:\s*/i, "")
+    .replace(/^[-–:]\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * @param {string} text
  * @returns {"help"|"status"|"goal_check"|"reminder_pause"|"reminder_resume"|"progress_note"|"task_add"|"task_move"|"task_update"|"shop_add"|"delete_goal"|"update_goal"|"list_goals"|"add_goal"|"unknown"}
@@ -88,13 +99,13 @@ export function parseGoal(text) {
   if (lower.startsWith("goal set:")) {
     content = original.slice("goal set:".length).trim();
   } else {
-    content = original.replace(/^ziel\s*:/i, "").trim();
+    content = cleanupGoalContent(original);
     content = content.replace(/\blangfristig\s*:?/gi, "").trim();
     content = content.replace(/\bmittelfristig\s*:?/gi, "").trim();
     content = content.replace(/\bkurzfristig\s*:?/gi, "").trim();
   }
 
-  content = content.replace(/^[-–:]\s*/, "").trim();
+  content = cleanupGoalContent(content);
 
   if (!type) {
     if (/^ziel\s*:/i.test(original) || /\bziel\s*:/i.test(original)) {
@@ -115,6 +126,62 @@ export function parseGoal(text) {
   }
 
   return { type, content };
+}
+
+/**
+ * Multi-goal tolerant parsing:
+ * - single goal text => one item
+ * - combined horizons in one sentence => multiple items
+ * @param {string} text
+ * @returns {{ type: string, content: string }[]}
+ */
+export function parseGoals(text) {
+  const original = String(text).trim();
+  const lower = normalizeText(original);
+
+  const markers = [];
+  for (const m of lower.matchAll(/\blangfristig\b/g)) {
+    markers.push({ index: m.index ?? 0, len: m[0].length, type: "Long-term" });
+  }
+  for (const m of lower.matchAll(/\bmittelfristig\b/g)) {
+    markers.push({ index: m.index ?? 0, len: m[0].length, type: "Mid-term" });
+  }
+  for (const m of lower.matchAll(/\bkurzfristig\b/g)) {
+    markers.push({ index: m.index ?? 0, len: m[0].length, type: "Short-term" });
+  }
+
+  if (markers.length <= 1) {
+    const single = parseGoal(original);
+    return single ? [single] : [];
+  }
+
+  markers.sort((a, b) => a.index - b.index);
+  const out = [];
+
+  for (let i = 0; i < markers.length; i += 1) {
+    const curr = markers[i];
+    const next = markers[i + 1];
+    const start = curr.index + curr.len;
+    const end = next ? next.index : original.length;
+    const rawChunk = original.slice(start, end);
+
+    let content = cleanupGoalContent(rawChunk);
+    content = content.replace(/^(und|,)\s*/i, "").trim();
+    content = content.replace(/\s*(und|,)\s*$/i, "").trim();
+
+    if (!content || content.length < 4) continue;
+    const words = content.split(/\s+/).filter(Boolean);
+    if (words.length === 1 && WEAK_GOAL_WORDS.has(words[0].toLowerCase())) continue;
+    if (words.length > 0 && words.every((w) => WEAK_GOAL_WORDS.has(w.toLowerCase()))) continue;
+
+    out.push({ type: curr.type, content });
+  }
+
+  if (out.length > 0) {
+    return out;
+  }
+  const single = parseGoal(original);
+  return single ? [single] : [];
 }
 
 function endOfDayUTC(d) {
